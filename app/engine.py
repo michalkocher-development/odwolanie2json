@@ -46,6 +46,8 @@ class Ctx:
     alt_text: str | None = None  # drugi wariant kolejności tekstu (strumień PDF) – dla LLM i ugruntowania
     pending_lists: list[tuple[str, dict[str, Any], str | None]] = field(default_factory=list)  # listy dla LLM
     verify: list[tuple[str, dict[str, Any], str | None, Any, dict[str, Any]]] = field(default_factory=list)  # do weryfikacji
+    normalizers: dict[str, Any] = field(default_factory=dict)  # normalizatory z YAML (config/normalizers.yaml + klasa)
+    validators: dict[str, Any] = field(default_factory=dict)   # walidatory z YAML (config/validators.yaml + klasa)
     selects: list[tuple[str, dict[str, Any], str | None]] = field(default_factory=list)  # listy z polem `select_one`
 
 
@@ -209,7 +211,7 @@ def _candidates(leaf: dict[str, Any], ctx: Ctx, item: str | None) -> tuple[Any, 
     if cfg.get("nominative") and re.search(r"\bwe?\s+$", txt[: m.start(1) if m.re.groups else m.start()]):
         raw = _to_nominative(raw) or raw
         how["nominative"] = raw
-    return normalize.apply(raw, leaf.get("normalize")), how
+    return normalize.apply(raw, leaf.get("normalize"), ctx.normalizers), how
 
 
 def _to_nominative(word: str) -> str | None:
@@ -266,7 +268,7 @@ def extract_leaf(leaf: dict[str, Any], ctx: Ctx, path: str, item: str | None) ->
                     raw = m.group(g)
                     if raw is None:
                         continue
-                    cand = normalize.apply(raw, leaf.get("normalize"))
+                    cand = normalize.apply(raw, leaf.get("normalize"), ctx.normalizers)
                     if cand in (None, ""):
                         continue
                     if leaf.get("validate") and not re.fullmatch(leaf["validate"], str(cand)):
@@ -288,7 +290,7 @@ def extract_leaf(leaf: dict[str, Any], ctx: Ctx, path: str, item: str | None) ->
             how = {"method": "llm_pending"}
 
     if value is not None and "normalize" in leaf and how.get("method") in ("rule", "item", "enum"):
-        value = normalize.apply(value, leaf["normalize"])
+        value = normalize.apply(value, leaf["normalize"], ctx.normalizers)
     if value is None and "default_if_many" in leaf and ctx.lens and ctx.lens[-1] > 1:
         value, how = leaf["default_if_many"], {"method": "default_if_many"}
     if value is None and "default" in leaf:
@@ -375,10 +377,10 @@ def _grounding(leaf: dict[str, Any]) -> str:
     return leaf.get("llm_grounding") or ("stem" if "person" in ([norm] if isinstance(norm, str) else norm) else "exact")
 
 
-def _llm_value(raw: str | None, ok: bool, leaf: dict[str, Any], strict: bool) -> Any:
+def _llm_value(raw: str | None, ok: bool, leaf: dict[str, Any], strict: bool, custom: dict[str, Any] | None = None) -> Any:
     if raw is None or not (ok or not strict):
         return None
-    value = normalize.apply(raw, leaf.get("normalize"))
+    value = normalize.apply(raw, leaf.get("normalize"), custom)
     if value is not None and leaf.get("validate") and not re.fullmatch(leaf["validate"], str(value)):
         return None
     return value
@@ -413,7 +415,7 @@ def run_llm(result: Any, ctx: Ctx) -> None:
         path, node, _, is_list = ids[key]
         if not is_list:
             raw, ok = ans
-            value = _llm_value(raw, ok, node, strict)
+            value = _llm_value(raw, ok, node, strict, ctx.normalizers)
             if value is not None:
                 _set_path(result, path, value)
             ctx.trace.append({"field": path, "value": value, "method": "llm", "raw": raw, "grounded": ok,
@@ -423,7 +425,7 @@ def run_llm(result: Any, ctx: Ctx) -> None:
         for i, row in enumerate(ans):
             obj = {}
             for k, (raw, ok) in row.items():
-                obj[k] = _llm_value(raw, ok, node[k], strict)
+                obj[k] = _llm_value(raw, ok, node[k], strict, ctx.normalizers)
                 ctx.trace.append({"field": f"{path}[{i}].{k}", "value": obj[k], "method": "llm", "raw": raw,
                                   "grounded": ok, **(_cite(ctx, raw) if ok else {})})
             if any(v is not None for v in obj.values()):
@@ -526,10 +528,63 @@ def run_verify(result: Any, ctx: Ctx) -> None:
             ctx.pending.append((path, leaf, item))
 
 
+def _shared(name: str) -> dict[str, Any]:
+    """Wspólne definicje z config/<name>.yaml (np. normalizers, validators) – dostępne dla wszystkich klas."""
+    import yaml
+
+    from .pipeline_paths import CONFIG
+
+    f = CONFIG / f"{name}.yaml"
+    return (yaml.safe_load(f.read_text(encoding="utf-8")) or {}) if f.exists() else {}
+
+
+def _iter_leaves(spec: Any, res: Any, path: str = ""):  # noqa: ANN202
+    """(ścieżka, liść YAML, wartość) dla każdego pola wyniku – także w listach."""
+    if isinstance(spec, dict) and LEAF_KEYS & spec.keys():
+        yield path, spec, res
+    elif isinstance(spec, dict) and isinstance(res, dict):
+        for k, v in spec.items():
+            if not k.startswith("_"):
+                yield from _iter_leaves(v, res.get(k), f"{path}.{k}" if path else k)
+    elif isinstance(spec, list) and isinstance(res, list):
+        for i, item in enumerate(res):
+            yield from _iter_leaves(spec[0], item, f"{path}[{i}]")
+
+
+def _warn(ctx: Ctx, path: str, msgs: list[str]) -> None:
+    for t in reversed(ctx.trace):  # dopisz do ostatniego wpisu śladu tego pola
+        if t.get("field") == path:
+            t.setdefault("warnings", []).extend(msgs)
+            return
+    ctx.trace.append({"field": path, "warnings": list(msgs)})
+
+
+def run_checks(result: Any, ctx: Ctx) -> None:
+    """Walidacja z YAML (miękka): `checks:` w polu i `cross_checks:` w klasie -> ostrzeżenia w śladzie, status `invalid`."""
+    from . import validate
+
+    for path, leaf, value in _iter_leaves(ctx.spec["output"], result):
+        if leaf.get("checks") and value is not None:
+            msgs = validate.check(value, leaf["checks"], ctx.validators)
+            if msgs:
+                _warn(ctx, path, msgs)
+    for rule in ctx.spec.get("cross_checks") or []:
+        try:
+            left, right = _get_path(result, rule["left"]), _get_path(result, rule["right"])
+        except (KeyError, IndexError, TypeError):
+            continue
+        msg = validate.cross_check(rule, left, right)
+        if msg:
+            _warn(ctx, rule["left"], [msg])
+
+
 def extract(text: str, spec: dict[str, Any], alt_text: str | None = None) -> tuple[Any, list[dict[str, Any]]]:
-    ctx = Ctx(text=text, spec=spec, sections=find_sections(text, spec), alt_text=alt_text)
+    ctx = Ctx(text=text, spec=spec, sections=find_sections(text, spec), alt_text=alt_text,
+              normalizers={**_shared("normalizers"), **(spec.get("normalizers") or {})},
+              validators={**_shared("validators"), **(spec.get("validators") or {})})
     result = build(spec["output"], ctx)
     run_verify(result, ctx)
     run_llm(result, ctx)
     run_select(result, ctx)
+    run_checks(result, ctx)
     return result, ctx.trace

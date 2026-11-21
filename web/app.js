@@ -113,7 +113,9 @@ function analyzeDoc(data) {
       confCount++;
     }
 
-    if (t && String(t.method || "").startsWith("decision") && (t.prob == null || t.prob < 0.85)) {
+    if (t && t.status === "invalid") {
+      review.push({ ...item, why: `Nie przeszło walidacji: ${t.note || "reguła z konfiguracji"}` });
+    } else if (t && String(t.method || "").startsWith("decision") && (t.prob == null || t.prob < 0.85)) {
       const pct = t.prob != null ? ` · pewność ${Math.round(t.prob * 100)}%` : "";
       review.push({ ...item, why: `Ustalone przez model decyzyjny${pct}` });
     } else if (t && t.method === "llm" && t.grounded === false) {
@@ -152,6 +154,7 @@ function buildCitation(t, isNull) {
   if (!t) return '<div class="cite">Brak śladu dla tego pola.</div>';
 
   const meta = [];
+  if (t.status === "invalid") meta.push(`<span class="conf low">⚠ Walidacja: ${esc(t.note || "")}</span>`);
   if (t.page) meta.push(`<span>Strona ${t.page}</span>`);
   if (t.prob != null) {
     const pct = Math.round(t.prob * 100);

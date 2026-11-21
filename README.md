@@ -4,6 +4,9 @@ Konwersja dokumentów sprawy odwoławczej KIO (odwołanie, pełnomocnictwo, potw
 zgodnego z kanonicznym modelem UZP – hybryda reguł konfigurowanych w YAML, otwartego modelu decyzyjnego i LLM,
 z cytatem źródłowym dla każdej wartości.
 
+Bez zmian w kodzie (pliki YAML) konfiguruje się: klasy dokumentów, reguły rozpoznawania, ekstrakcję pól, normalizację,
+walidację (także reguły między polami) i mapowanie na strukturę JSON.
+
 Dokumentacja: [architektura](docs/ARCHITEKTURA.md) · [jak dodać nową klasę dokumentu](docs/NOWA_KLASA.md)
 (przykład klasy dodanej samym YAML-em: `config/doctypes_examples/kopia_odwolania.yaml`).
 

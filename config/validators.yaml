@@ -1,0 +1,11 @@
+# Walidatory wspólne dla wszystkich klas dokumentów (użycie w polu: `checks: [nazwa, ...]`).
+# Wbudowane (bez definicji tutaj): nip, regon, pesel, iban – sumy kontrolne; krs – 10 cyfr; date – poprawna data ISO.
+# Walidacja jest miękka: wynik się nie zmienia, pole dostaje status `invalid` z komunikatem (do sprawdzenia).
+nip_format: {regex: '\d{10}', message: "NIP powinien mieć 10 cyfr"}
+regon_format: {regex: '\d{9}|\d{14}', message: "REGON powinien mieć 9 albo 14 cyfr"}
+pesel_format: {regex: '\d{11}', message: "PESEL powinien mieć 11 cyfr"}
+rachunek_format: {regex: '\d{26}', message: "numer rachunku powinien mieć 26 cyfr (bez PL)"}
+bzp: {regex: '\d{4}/BZP\d{8}(/\d{2})?', message: "niepoprawny format numeru BZP (RRRR/BZP########)"}
+ted: {regex: '\d{6}-\d{4}', message: "niepoprawny format numeru TED (NNNNNN-RRRR)"}
+kwota: {min: 0.01, max: 100000000, message: "kwota spoza zakresu"}
+email: {regex: '[\w.+-]+@[\w-]+(\.[\w-]+)+', message: "niepoprawny adres e-mail"}

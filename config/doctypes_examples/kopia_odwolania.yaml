@@ -23,6 +23,7 @@ output:
     regex:
       - '(?:Data\s+przekazania|w\s+dniu)[ \t:]*(\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4})'
     normalize: date
+    checks: [date]                        # walidator wbudowany
     llm: "Data przekazania kopii odwołania zamawiającemu"
   zamawiajacy:
     regex:
@@ -32,6 +33,7 @@ output:
     llm: "Pełna nazwa zamawiającego, któremu przekazano kopię"
   numer_postepowania:
     regex: '(?:postępowani\w*\s+(?:nr|o\s+znaku)|znak\w*)\s*:?\s*([A-Z0-9][\w./\-]*\d)'
+    normalize: znak_sprawy                # normalizator z YAML (config/normalizers.yaml)
     llm: "Numer (znak) postępowania o udzielenie zamówienia"
   sposob_id:
     rules:

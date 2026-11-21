@@ -21,12 +21,14 @@ classify:
 output:
   przelew_bankowy:
     data_operacji:
+      checks: [date]
       llm: "Data operacji/realizacji przelewu"
       regex:
         - '(?:Data\s+(?:operacji|transakcji|realizacji|wykonania|księgowania|zlecenia|obciążenia)|w\s+dniu)[ \t.:]*(?:[^\n]*\n[^\n]*?)??(\d{4}-\d{2}-\d{2}|\d{1,2}[.\-/]\d{1,2}[.\-/]\d{4}|\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4})'
         - '\b(\d{4}-\d{2}-\d{2})\b'
       normalize: date
     kwota:
+      checks: [kwota]
       llm: "Kwota przelewu (sama liczba z groszami, np. '100,00')"
       regex:
         - '(?:Kwota(?!\s+(?:prowizji|opłaty))|w\s+kwocie|Wartość)[^\d\n]{0,90}(?:\n[^\d\n]{0,60})?(\d[\d  .]*[.,]\d{2})'
@@ -34,6 +36,7 @@ output:
       normalize: amount
       validate: '(?!0(?:\.0+)?$).+'
     na_rachunek:
+      checks: [rachunek_format]
       llm: "Numer rachunku odbiorcy (beneficjenta)"
       regex:
         - '(?:Rachunek\s+(?:odbiorcy|beneficjenta|docelowy|adresata|uznawany)|Na\s+rachun\w+(?:\s+nr)?)[ \t.:]*(?:[^\n]*\n[^\n]*?)??((?:PL)?\s?\d{2}(?:\s?\d{4}){6})'
@@ -51,6 +54,7 @@ output:
       ci: false
       normalize: ws
     z_rachunku:
+      checks: [rachunek_format]
       llm: "Numer rachunku zleceniodawcy (nadawcy, płatnika)"
       regex:
         - '(?:Rachunek\s+(?:obciążany|zleceniodawcy|nadawcy|płatnika|źródłowy)|Z\s+rachun\w+(?:\s+nr)?)[ \t.:]*(?:[^\n]*\n[^\n]*?)??((?:PL)?\s?\d{2}(?:\s?\d{4}){6})'

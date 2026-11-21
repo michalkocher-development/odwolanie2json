@@ -119,7 +119,8 @@ def _process_pdf(pdf: Path) -> tuple[str | None, Any, dict[str, Any]]:
     spec = load_doctypes()[doctype]
     result, trace = engine.extract(text, spec, alt_text=flow)
     info["trace"] = trace
-    info["status"] = status.field_status(spec["output"], result)  # found / absent_ok / not_applicable / missing
+    warnings = {e["field"]: e["warnings"] for e in trace if e.get("warnings")}
+    info["status"] = status.field_status(spec["output"], result, warnings)  # found/invalid/absent_ok/not_applicable/missing
     return doctype, result, info
 
 

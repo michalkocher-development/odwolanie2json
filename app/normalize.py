@@ -125,11 +125,49 @@ NORMALIZERS: dict[str, Callable[[Any], Any]] = {
 }
 
 
-def apply(value: Any, names: str | list[str] | None) -> Any:
+def run_steps(value: Any, steps: list[dict[str, Any]], custom: dict[str, Any] | None = None) -> Any:
+    """Normalizator zdefiniowany w YAML jako lista kroków (bez kodu):
+      {use: date}                 – normalizator wbudowany lub inny zdefiniowany w YAML
+      {replace: [regex, zamiana]} – zamiana regexem (re.sub)
+      {strip: " .,"}              – usunięcie znaków z brzegów (domyślnie białe znaki)
+      {upper: true} / {lower: true} / {title: true}
+      {map: {wartość: zamiennik}} – słownik wartości (bez rozróżniania wielkości liter)
+      {template: "PL{value}"}     – szablon wyniku
+      {none_if: regex}            – wartość pasująca do wzorca -> brak wartości (null)
+    """
+    for step in steps:
+        if value is None:
+            return None
+        (op, arg), = step.items()
+        if op == "use":
+            value = apply(value, arg, custom)
+        elif op == "replace":
+            value = re.sub(arg[0], arg[1], str(value))
+        elif op == "strip":
+            value = str(value).strip(None if arg is True else arg)
+        elif op in ("upper", "lower", "title") and arg:
+            value = getattr(str(value), op)()
+        elif op == "map":
+            table = {str(k).lower(): v for k, v in arg.items()}
+            value = table.get(str(value).strip().lower(), value)
+        elif op == "template":
+            value = str(arg).format(value=value)
+        elif op == "none_if":
+            value = None if re.fullmatch(arg, str(value)) else value
+        else:
+            raise ValueError(f"nieznany krok normalizatora: {op}")
+    return value if value != "" else None
+
+
+def apply(value: Any, names: str | list[str] | None, custom: dict[str, Any] | None = None) -> Any:
+    """Normalizatory po nazwie: wbudowane (NORMALIZERS) albo zdefiniowane w YAML (`custom`: nazwa -> lista kroków)."""
     if value is None or names is None:
         return value
     for name in [names] if isinstance(names, str) else names:
-        value = NORMALIZERS[name](value)
+        if custom and name in custom:
+            value = run_steps(value, custom[name], custom)
+        else:
+            value = NORMALIZERS[name](value)
         if value is None:
             return None
     return value

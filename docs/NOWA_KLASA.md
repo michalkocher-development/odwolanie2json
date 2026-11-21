@@ -41,9 +41,46 @@ z tego katalogu przy starcie. Gotowy, działający przykład: `config/doctypes_e
 | `select_one` | w liście >1 elementu model wskazuje jeden element (1), reszta 0 (`question`, `label`, `none`) | zamawiający prowadzący |
 | `llm` | opis pola dla LLM – wywoływany tylko dla pustych pól; wynik musi być ugruntowany w tekście | `llm: "Tytuł zamówienia"` |
 | `llm_grounding` | `exact` (domyślnie) lub `stem` (osoby, odmiana; automatycznie dla `normalize: person`) | |
+| `checks` | walidatory (miękkie – status `invalid` z komunikatem, wartość zostaje): wbudowane `nip`, `regon`, `pesel`, `iban` (sumy kontrolne), `krs`, `date` albo zdefiniowane w YAML | `checks: [date]` |
 | `verify` | opis do weryfikacji wartości modelem decyzyjnym (domyślnie wyłączone w `settings.yaml`) | |
 | `absent_ok` | brak wartości jest normalny (powód) – status `absent_ok` | `absent_ok: "PESEL rzadko podawany"` |
 | `applies_if` | warunek: `{field, equals}` (`../` = poziom wyżej) lub `{list_min: 2}`; inaczej `not_applicable` | |
+
+## Walidacja, normalizacja i mapowanie – bez kodu
+
+Wszystkie trzy warstwy konfiguruje się w YAML: wspólnie dla wszystkich klas (`config/normalizers.yaml`,
+`config/validators.yaml`) albo w pliku klasy (sekcje `normalizers:` i `validators:` – nadpisują wspólne).
+
+**Normalizator z kroków** (użycie w polu: `normalize: nazwa`; można łączyć z wbudowanymi):
+```yaml
+normalizers:
+  znak_sprawy:
+    - {use: strip}                                  # normalizator wbudowany lub inny z YAML
+    - {replace: ['\s*([/.\-])\s*', '\1']}            # zamiana regexem
+    - {upper: true}                                 # także lower / title
+  kanal:
+    - {map: {"poczta elektroniczna": e-mail, "epuap": ePUAP}}   # słownik wartości
+    - {template: "{value}"}                          # szablon; none_if: regex -> null
+```
+
+**Walidatory** (użycie w polu: `checks: [nazwa, ...]`). Walidacja jest miękka: wartość zostaje w wyniku, a pole dostaje
+status `invalid` z komunikatem – widoczny w śladzie, API i interfejsie („do sprawdzenia”).
+```yaml
+validators:
+  bzp:    {regex: '\d{4}/BZP\d{8}(/\d{2})?', message: "niepoprawny format numeru BZP"}
+  kwota:  {min: 0.01, max: 100000000, message: "kwota spoza zakresu"}
+  tryb:   {in: [podstawowy, przetarg nieograniczony], message: "nieznany tryb"}
+```
+Wbudowane: `nip`, `regon`, `pesel`, `iban` (sumy kontrolne), `krs` (10 cyfr), `date` (poprawna data).
+
+**Reguły krzyżowe** między polami (poziom pliku klasy):
+```yaml
+cross_checks:
+  - {left: OdwolanieKIO.czynnosc_dzien, op: "<=", right: OdwolanieKIO.data, message: "data czynności po dacie pisma"}
+```
+
+**Mapowanie** wartości na strukturę wyniku: drzewo `output` (nazwy i zagnieżdżenie pól JSON), słowniki `enums`
+z `from` (np. identyfikator -> opis), `rules` (wzorzec -> wartość), `const` / `default`.
 
 ## Referencja kluczy listy (szablon w liście)
 

@@ -1,0 +1,16 @@
+# Normalizatory wspólne dla wszystkich klas, definiowane krokami (użycie w polu: `normalize: nazwa`).
+# Kroki: use (normalizator wbudowany/inny z YAML), replace [regex, zamiana], strip, upper, lower, title,
+#        map {wartość: zamiennik}, template "…{value}…", none_if regex.
+# Wbudowane (app/normalize.py): ws, strip, date, digits, account, amount, nospace, ted, person, company, int.
+
+# znak sprawy: bez spacji wokół separatorów, wielkie litery ("zp / 271 / 5 / 2026" -> "ZP/271/5/2026")
+znak_sprawy:
+  - {use: strip}
+  - {replace: ['\s*([/.\-])\s*', '\1']}
+  - {upper: true}
+
+# sposób doręczenia / przekazania: słownik synonimów
+kanal:
+  - {use: ws}
+  - {map: {"poczta elektroniczna": e-mail, "email": e-mail, "e-mail": e-mail, "epuap": ePUAP,
+           "platforma epuap": ePUAP, "list polecony": poczta, "operator pocztowy": poczta}}

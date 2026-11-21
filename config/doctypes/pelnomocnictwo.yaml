@@ -40,7 +40,7 @@ output:
           regex: 'niżej\s+podpisan\w*\s+([A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+\s+[A-ZŁŚŻŹĆ][a-ząćęłńóśźż-]+)'
           ci: false
           normalize: person
-        krs: {regex: 'KRS\D{0,25}?(\d{10})', llm: "Numer KRS mocodawcy (10 cyfr), jeśli podany", absent_ok: "osoba fizyczna / przedsiębiorca z CEIDG nie ma KRS"}
+        krs: {regex: 'KRS\D{0,25}?(\d{10})', llm: "Numer KRS mocodawcy (10 cyfr), jeśli podany", absent_ok: "osoba fizyczna / przedsiębiorca z CEIDG nie ma KRS", checks: [krs]}
         nazwa:
           regex:
             - '(?s)Mocodawcą\s+jest\s+(.+?),\s*(?:ul\.|al\.|pl\.|os\.)'
@@ -53,7 +53,7 @@ output:
           normalize: company
           llm: "Pełna nazwa mocodawcy (podmiotu udzielającego pełnomocnictwa)"
           verify: "pełna nazwa mocodawcy (podmiotu udzielającego pełnomocnictwa)"
-        nip: {regex: 'NIP\W{0,15}(?:PL)?\s?(\d[\d -]{8,12}\d)', normalize: digits, validate: '\d{10}', llm: "NIP mocodawcy (10 cyfr)"}
+        nip: {regex: 'NIP\W{0,15}(?:PL)?\s?(\d[\d -]{8,12}\d)', normalize: digits, validate: '\d{10}', llm: "NIP mocodawcy (10 cyfr)", checks: [nip_format]}
         typ:
           rules:
             - {pattern: 'prowadząc\w*\s+działalność|Centraln\w+\s+Ewidencji|CEIDG', value: osoba_fizyczna}
@@ -76,4 +76,4 @@ output:
         ci: false
         normalize: person
         llm: "Imię i nazwisko pełnomocnika, w mianowniku, bez tytułu"
-      pesel: {regex: 'PESEL\W{0,15}(\d{11})', validate: '\d{11}', absent_ok: "PESEL pełnomocnika podawany rzadko"}   # w danych ref. jako tekst
+      pesel: {regex: 'PESEL\W{0,15}(\d{11})', validate: '\d{11}', absent_ok: "PESEL pełnomocnika podawany rzadko", checks: [pesel_format]}   # w danych ref. jako tekst

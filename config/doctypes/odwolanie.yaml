@@ -51,9 +51,16 @@ enums:
     11: Opis przedmiotu zamówienia (OPZ)
     # 12: ??? - brak w danych treningowych, do ustalenia z organizatorem
 
+# Reguły krzyżowe (walidacja miękka -> status pola `invalid`). Sumy kontrolne dla dokumentów produkcyjnych:
+# zamień w polach nip_format/regon_format na `nip`/`regon` (dane syntetyczne organizatora mają część numerów
+# z niepoprawną sumą kontrolną).
+cross_checks:
+  - {left: OdwolanieKIO.czynnosc_dzien, op: "<=", right: OdwolanieKIO.data, message: "data czynności późniejsza niż data pisma"}
+
 output:
   OdwolanieKIO:
     data:
+      checks: [date]
       absent_ok: "nagłówek pisma nie zawiera daty sporządzenia"
       # linia nagłówka = cała linia „Miejscowość, [dn./dnia] DATA [r./roku]” (zdania z treści ciągną się dalej po dacie)
       scope: head
@@ -68,6 +75,7 @@ output:
         question: "Która data jest datą sporządzenia tego pisma (z nagłówka, obok miejscowości)?"
         none: "Brak daty sporządzenia pisma"
     czynnosc_dzien:
+      checks: [date]
       llm: "Data zaskarżonej czynności zamawiającego (dotyczy pierwszego zarzutu), np. '9 października 2026'"
       regex:
         - '^[ \t]*Zamawiając\w+\s+w\s+dniu\s+(\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4}|\d{1,2}\.\d{1,2}\.\d{4})'
@@ -118,7 +126,7 @@ output:
 
   Odwolujacy:
     - _scope: odwolujacy
-      krs: {regex: 'KRS\D{0,25}?(\d{10})', llm: "Numer KRS podmiotu (10 cyfr), jeśli podany", absent_ok: "nie każdy podmiot ma KRS (np. przedsiębiorca z CEIDG)"}
+      krs: {regex: 'KRS\D{0,25}?(\d{10})', llm: "Numer KRS podmiotu (10 cyfr), jeśli podany", absent_ok: "nie każdy podmiot ma KRS (np. przedsiębiorca z CEIDG)", checks: [krs]}
       nazwa:
         llm: "Pełna nazwa Odwołującego (przy konsorcjum: nazwa Lidera konsorcjum)"
         verify: "pełna nazwa Odwołującego (wykonawcy wnoszącego odwołanie)"
@@ -126,8 +134,8 @@ output:
           - 'Lider\w*[^\n]*:[ \t]*\n\s*([^\n]+)'          # konsorcjum -> nazwa lidera
           - '\A\s*(?!Konsorcjum)([^\n]+)'
         normalize: company
-      nip: {regex: 'NIP\W{0,15}(?:PL)?\s?(\d[\d -]{8,12}\d)', normalize: digits, validate: '\d{10}', llm: "NIP podmiotu (10 cyfr)"}
-      regon: {regex: 'REGON\W{0,15}(\d{9}(?:\d{5})?)', llm: "REGON podmiotu"}
+      nip: {regex: 'NIP\W{0,15}(?:PL)?\s?(\d[\d -]{8,12}\d)', normalize: digits, validate: '\d{10}', llm: "NIP podmiotu (10 cyfr)", checks: [nip_format]}
+      regon: {regex: 'REGON\W{0,15}(\d{9}(?:\d{5})?)', llm: "REGON podmiotu", checks: [regon_format]}
       przez-pelnomocnika:
         rules:
           - {pattern: 'reprezentowan\w*\s+przez|pełnomocni', value: 1}
@@ -148,6 +156,7 @@ output:
           regex: '(?s)adres\s+do\s+korespondencji\s*:\s*(.+?),\s*(?:ul\.|al\.|pl\.|os\.)'
           normalize: strip
         mail:
+          checks: [email]
           applies_if: {field: "../przez-pelnomocnika", equals: 1, note: "odwołujący działa bez pełnomocnika"}
           absent_ok: "nie podano adresu e-mail pełnomocnika"
           llm: "Adres e-mail kontaktowy pełnomocnika Odwołującego"
@@ -162,10 +171,10 @@ output:
       _count_check: "Czy w tym fragmencie wymieniono więcej niż jednego zamawiającego (zamawiający wspólnie udzielający zamówienia)?"
       _llm: "Wszyscy zamawiający (instytucje zamawiające) wymienieni w piśmie, w kolejności występowania"
       _llm_skip: [prowadzacy_postepowanie]
-      krs: {regex: 'KRS\D{0,25}?(\d{10})', llm: "Numer KRS podmiotu (10 cyfr), jeśli podany", absent_ok: "podmioty publiczne często nie mają KRS"}
+      krs: {regex: 'KRS\D{0,25}?(\d{10})', llm: "Numer KRS podmiotu (10 cyfr), jeśli podany", absent_ok: "podmioty publiczne często nie mają KRS", checks: [krs]}
       nazwa: {regex: '\A\s*(?:[^\n]*:[ \t]*\n\s*)?([^\n]+)', normalize: company, llm: "Pełna nazwa tego Zamawiającego", verify: "pełna nazwa Zamawiającego (instytucji prowadzącej przetarg)"}
-      nip: {regex: 'NIP\W{0,15}(?:PL)?\s?(\d[\d -]{8,12}\d)', normalize: digits, validate: '\d{10}', llm: "NIP podmiotu (10 cyfr)"}
-      regon: {regex: 'REGON\W{0,15}(\d{9}(?:\d{5})?)', llm: "REGON podmiotu"}
+      nip: {regex: 'NIP\W{0,15}(?:PL)?\s?(\d[\d -]{8,12}\d)', normalize: digits, validate: '\d{10}', llm: "NIP podmiotu (10 cyfr)", checks: [nip_format]}
+      regon: {regex: 'REGON\W{0,15}(\d{9}(?:\d{5})?)', llm: "REGON podmiotu", checks: [regon_format]}
       prowadzacy_postepowanie:
         applies_if: {list_min: 2, note: "w sprawie jest jeden zamawiający"}
         within: '\A[^\n]*'                         # etykieta elementu, np. "Zamawiający – Lider, prowadzący postępowanie:"
@@ -180,6 +189,7 @@ output:
 
   ZamowieniePubliczne:
     numer_bzp:
+      checks: [bzp]
       absent_ok: "brak ogłoszenia w BZP (np. tylko Dz.Urz. UE) lub numer nie podany w piśmie"
       scope: dotyczy
       scope_fallback: head
@@ -192,6 +202,7 @@ output:
       scope_fallback: head
       regex: '(?:nr|numer)\s+(?:referencyjn\w*|postępowania|sprawy|wewnętrzn\w*)(?:\s+sprawy)?\s*:?\s*([A-Z0-9][\w./\-]*\d)'
     numer_ted:
+      checks: [ted]
       absent_ok: "zamówienie poniżej progów unijnych (bez ogłoszenia w Dz.Urz. UE)"
       scope: dotyczy
       scope_fallback: head

@@ -20,7 +20,9 @@ silnik ekstrakcji        app/engine.py: interpreter config/doctypes/<klasa>.yaml
  │   4. LLM dla pustych pól (llm:) i list (_llm:) – jedno wywołanie na dokument, structured output,
  │      kontrola ugruntowania (wartość musi wystąpić w tekście; dla osób – rdzenie słów, mianownik)
  ▼
-statusy pól              app/status.py: found / absent_ok / not_applicable / missing (absent_ok, applies_if w YAML)
+walidacja                app/validate.py: walidatory z YAML (checks, cross_checks) – miękkie, status `invalid`
+ ▼
+statusy pól              app/status.py: found / invalid / absent_ok / not_applicable / missing
  ▼
 JSON + ślad              output/<sprawa>/<plik>.json ; trace/<sprawa>/<plik>.json (metoda, cytat, strona, pewność)
 ```
@@ -36,7 +38,8 @@ JSON + ślad              output/<sprawa>/<plik>.json ; trace/<sprawa>/<plik>.js
 | `app/engine.py` | interpreter konfiguracji klasy dokumentu (składnia kluczy: docstring + `docs/NOWA_KLASA.md`) |
 | `app/normalize.py` | normalizatory wartości: daty, kwoty, rachunki, NIP/KRS, TED/BZP, nazwy firm, osoby |
 | `app/names.py` | imię i nazwisko w mianowniku (słownik imion z płcią + reguły końcówek nazwisk) |
-| `app/status.py` | status każdego pola (czy brak wartości jest błędem) |
+| `app/validate.py` | walidatory wbudowane (sumy kontrolne NIP/REGON/PESEL/IBAN) i z YAML, reguły krzyżowe |
+| `app/status.py` | status każdego pola (found / invalid / absent_ok / not_applicable / missing) |
 | `app/backend.py` | jedyny punkt dostępu do modeli: profile dostawców, LLM (JSON Schema), OCR, decyzje, ogranicznik zapytań, licznik kosztu |
 | `app/llm.py` | prompt ekstrakcji, kontrola ugruntowania |
 | `app/ollama.py`, `app/jev.py` | alternatywny backend: własne serwery (Ollama, JEV-9B) |
@@ -74,7 +77,8 @@ z prawdopodobieństwem, status pola. Wartości z LLM są przyjmowane tylko, gdy 
 ## Rozszerzalność
 
 Nowa klasa dokumentu = nowy plik YAML (`docs/NOWA_KLASA.md`, przykład: `config/doctypes_examples/kopia_odwolania.yaml`).
-Nowy normalizator = funkcja w `app/normalize.py` dopisana do `NORMALIZERS`. Nowy dostawca modeli = profil
+Reguły rozpoznawania (`classify`), ekstrakcji, normalizacji (`normalizers`), walidacji (`validators`, `checks`,
+`cross_checks`) i mapowania (`output`, `enums`) – wyłącznie w YAML. Nowy dostawca modeli = profil
 w `config/settings.yaml` (API zgodne z OpenAI).
 
 ## Testy i ewaluacja

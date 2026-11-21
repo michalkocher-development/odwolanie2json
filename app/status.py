@@ -1,6 +1,7 @@
 """Status każdego pola wyniku – czy brak wartości jest błędem, czy normalną sytuacją.
 
 found           – wartość znaleziona
+invalid         – wartość znaleziona, ale nie przeszła walidacji z YAML (`checks`, `cross_checks`) – do sprawdzenia
 absent_ok       – brak wartości, ale to typowe (YAML: `absent_ok: "powód"`), np. PESEL, numer TED
 not_applicable  – pole nie dotyczy tego dokumentu (YAML: `applies_if`), np. imię i nazwisko mocodawcy-spółki
 missing         – brak wartości w polu, które zwykle występuje (ostrzeżenie)
@@ -31,12 +32,16 @@ def _applies(cond: dict[str, Any], stack: list[tuple[dict[str, Any], int]]) -> b
     return stack[level][0].get(ref) == cond.get("equals")
 
 
-def field_status(spec_output: Any, result: Any) -> dict[str, dict[str, str]]:
+def field_status(spec_output: Any, result: Any, warnings: dict[str, list[str]] | None = None) -> dict[str, dict[str, str]]:
+    """`warnings` (ścieżka -> komunikaty walidacji) zmienia status znalezionego pola na `invalid`."""
+    warnings = warnings or {}
     out: dict[str, dict[str, str]] = {}
 
     def walk(spec: Any, res: Any, path: str, stack: list[tuple[dict[str, Any], int]]) -> None:
         if isinstance(spec, dict) and LEAF_KEYS & spec.keys():
-            if res is not None and res != "":
+            if res is not None and res != "" and warnings.get(path):
+                out[path] = {"status": "invalid", "note": "; ".join(warnings[path])}
+            elif res is not None and res != "":
                 out[path] = {"status": "found"}
             elif spec.get("applies_if") and not _applies(spec["applies_if"], stack):
                 out[path] = {"status": "not_applicable", "note": spec["applies_if"].get("note", "nie dotyczy")}
