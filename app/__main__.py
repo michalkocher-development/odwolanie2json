@@ -31,7 +31,7 @@ def main() -> None:
     warn_missing_key()
     if not a.input.is_dir():
         raise SystemExit(f"Brak folderu wejściowego: {a.input} (oczekiwana struktura: input/<sprawa>/*.pdf)")
-    n = process_tree(a.input, a.output, None if a.no_trace else a.trace)
+    n = process_tree(a.input, a.output, None if a.no_trace else a.trace, progress=True)
     print(f"Zapisano {n} plików JSON w {a.output}")
 
 

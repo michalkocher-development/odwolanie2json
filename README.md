@@ -29,7 +29,7 @@ docker compose run --rm cli    # tryb wsadowy: ./input/<sprawa>/*.pdf -> ./outpu
 Testy (bez sieci i kosztów): `pip install -r requirements-dev.txt && pytest`
 
 - `input/caseN/*.pdf` → `output/caseN/<ta sama nazwa>.json`
-- Dokumenty nierozpoznane (np. ogłoszenie TED) są pomijane.
+- Dokument spoza klas (np. ogłoszenie TED) daje plik z pustym obiektem `{}` (ustalenie z organizatorem).
 - `trace/` zawiera dla każdego pola: wartość, metodę (regex/reguła/enum), wzorzec i fragment źródłowy (transparentność).
 
 ## Interfejs webowy
@@ -47,7 +47,7 @@ Serwer bez dodatkowych zależności (`http.server`); API: `POST /api/process` (t
 
 ```
 PDF ─► pdf_text (pdfplumber, MIT; skan → OCR modelem wizyjnym, render pypdfium2)
-    ─► classify (słowa kluczowe z YAML; gdy niepewne – model decyzyjny; nierozpoznane pomijane)
+    ─► classify (słowa kluczowe z YAML; gdy niepewne – model decyzyjny; dokument spoza klas -> {})
     ─► engine (YAML): regex / reguły / sekcje ─► model decyzyjny (wybory, kandydaci) ─► LLM (puste pola i listy)
     ─► JSON + trace (metoda, cytat, strona, prawdopodobieństwo, status pola)
 ```
@@ -77,123 +77,42 @@ Zmienne: `PROVIDER`, `DECISION_PROVIDER`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `DE
 - `app/normalize.py` – normalizatory: `date`, `amount`, `account`, `ted`, `person`, `digits`, `nospace`, `ws`, `strip`, `int`.
 - `eval/evaluate.py` – F1 per pole na zbiorze treningowym.
 
-## Ewaluacja
+## Wyniki
 
-Dane treningowe organizatora nie są w repo – sklonuj je obok projektu:
+Obecna wersja: dostawca Privatemode (UE), model GLM-5.3-Flash, ekstrakcja tekstu pdfplumber/pypdfium2. Porównanie z dwoma
+oczywistymi podejściami: **same regexy** (nasze reguły z YAML, bez modeli) i **samo LLM** (ten sam model dostaje tekst
+dokumentu i wzór JSON organizatora z komentarzami i zwraca cały JSON; typ dokumentu podany z góry).
 
-```bash
-git clone https://github.com/Urzad-Zamowien-Publicznych/hacknation-2026 ../tasks/uzp   # domyślna ścieżka --data
-```
+**Dokładność (F1)**
 
+| zbiór | same regexy | **hybryda** | samo LLM |
+|---|---|---|---|
+| treningowy UZP (60 spraw, 180 PDF) | 0.998 | **0.998** | 0.905 |
+| nietypowe układy – zbiór kontrolny (90 PDF) | 0.563 | **0.881** | 0.822 |
+| skany bez warstwy tekstowej (90 PDF; regexy z OCR) | 0.600 | **0.907** | – |
 
-```bash
-python eval/evaluate.py --data ../tasks/uzp/dane            # pełny raport
-python eval/evaluate.py --only przelew --errors kwota       # błędy wybranego pola
-python eval/evaluate.py --cases 40-60                       # podzbiór przykładów
-```
+**Czas i koszt** (czas na dokument mierzony sekwencyjnie)
 
-## Wyniki (zbiór treningowy, 60 spraw / 180 PDF)
-
-| konfiguracja | F1 |
-|---|---|
-| regex + JEV + LLM | 0.9995 |
-| ablacja: pola z `llm:` bez regexów, tylko LLM (sprawy 41–60) | 1.000 |
-| ta sama ablacja z wyłączonym LLM | 0.575 |
-| `czynnosc_powod_id` bez reguł: clef-flash (OpenRouter) | 60/60 |
-| `czynnosc_powod_id` bez reguł: JEV-9B (lokalnie) | 59/60 |
-
-```bash
-python eval/evaluate.py --llm-only --cases 41-60   # test fallbacku LLM
-python eval/bench_powod.py                         # benchmark JEV dla czynnosc_powod_id
-python eval/diff.py pelnomocnictwo 40-60            # pełne porównanie pred/gold
-```
-
-### Test odporności: dane adwersaryjne
-
-`eval/adversarial/gen.py` generuje sprawy celowo inne niż dane UZP (inne etykiety i układy, tabele, odmiana nazwisk,
-formaty dat/NIP/IBAN/kwot, bank po angielsku, konsorcja, rozpraszające daty, brakujące pola):
-
-```bash
-python eval/adversarial/gen.py --out ../tasks/adversarial --n 30 --seed 7          # zbiór do analizy błędów
-python eval/adversarial/gen.py --out ../tasks/adversarial_holdout --n 30 --seed 2026 # zbiór kontrolny
-python eval/evaluate.py --data ../tasks/adversarial_holdout
-```
-
-| zbiór | same regexy | pełny pipeline |
+| zbiór | hybryda | samo LLM |
 |---|---|---|
-| treningowy UZP (60 spraw) | 0.9995 | **1.000** |
-| adwersaryjny seed 7 (analiza błędów) | 0.376 | **0.897** |
-| adwersaryjny seed 2026 (kontrolny, niewidziany) | 0.535 | **0.885** |
+| treningowy UZP | **0.55 s, €0.07 / 1000 dok.** | 3.03 s, €0.62 / 1000 dok. |
+| nietypowe układy | **2.44 s, €0.30 / 1000 dok.** | 2.57 s, €0.36 / 1000 dok. |
+| skany | partia 90 skanów w 4.6 min (8 równolegle), €1.30 / 1000 dok. | – |
 
-Mechanizmy odporności: wybór spośród kandydatów (`candidates`: data/miejscowość z nagłówka), sprawdzanie liczby elementów listy i wybór lidera modelem decyzyjnym (`_count_check`, `select_one`), klasyfikacja modelem decyzyjnym, gdy słowa kluczowe nie wystarczą (`classify.description`);
-fallback LLM dla pól (`llm:`) i list (`_llm:`); ugruntowanie wartości w tekście (dla osób – z uwzględnieniem odmiany);
-dwa warianty kolejności tekstu (układ wizualny + strumień PDF – tabele); normalizacja ligatur.
+- Na znanych układach reguły wystarczają – hybryda daje ten sam wynik co same regexy, a model wkracza rzadko
+  (91% pól z regexów, LLM w 14 na 180 dokumentów). Na nowych układach i skanach same regexy spadają do ~0.56–0.60,
+  hybryda utrzymuje ~0.88–0.91. Względem „samego LLM” hybryda jest dokładniejsza na każdym zbiorze, a na typowych
+  dokumentach kilka razy szybsza i tańsza.
+- Skany: OCR tylko tylu stron, ile potrzebuje klasa (średnio 1.2 strony na dokument), strony równolegle; 150 skanów ≈ 8 min.
+- Zbiory „nietypowe układy” i „skany” generują `eval/adversarial/gen.py` i `eval/make_scans.py` (inne etykiety i układy,
+  tabele, odmiana nazwisk, formaty dat/NIP/IBAN, konsorcja, bank po angielsku; skany: obraz strony bez warstwy tekstowej).
 
-### Wyniki dla dostawcy domyślnego (UE): Privatemode, GLM-5.3-Flash
-
-Regulamin: otwarte modele z możliwością instalacji lokalnej + API u usługodawcy i na serwerze w UE. Domyślny dostawca:
-Privatemode (Edgeless Systems GmbH, DE; przetwarzanie wyłącznie w UE), model GLM-5.3-Flash (MIT) – ekstrakcja, OCR i decyzje
-(technika System One na logprobs). Pomiary: `python eval/summarize.py privatemode` (wyniki `eval/results/privatemode/`).
-Czas na dokument zawiera kolejkowanie przez ogranicznik zapytań (limit dostawcy 40 zapytań/min); pojedyncze zapytanie 0.5–1 s.
-
-#### Treningowy UZP (180 dok.)
-
-| wariant | F1 | śr. czas / dok. | koszt / 1000 dok. | wywołań modeli / dok. |
-|---|---|---|---|---|
-| Same regexy/reguły (bez modeli) | 1.000 | 0.29 s | €0.000 | 0.00 |
-| **Hybryda (nasz system)** | 0.999 | 14.80 s | €0.071 | 1.30 |
-| Hybryda bez LLM (regex + model decyzyjny) | 0.999 | 13.50 s | €0.040 | 1.23 |
-| Hybryda bez modelu decyzyjnego (regex + LLM) | 1.000 | 2.96 s | €0.031 | 0.07 |
-| Samo LLM: cały tekst + wzór JSON | 0.893 | 11.84 s | €0.619 | 1.00 |
-
-#### Adwersaryjny kontrolny (90 dok.)
-
-| wariant | F1 | śr. czas / dok. | koszt / 1000 dok. | wywołań modeli / dok. |
-|---|---|---|---|---|
-| Same regexy/reguły (bez modeli) | 0.572 | 0.10 s | €0.000 | 0.00 |
-| **Hybryda (nasz system)** | 0.885 | 28.80 s | €0.300 | 2.51 |
-| Hybryda bez LLM (regex + model decyzyjny) | 0.646 | 26.90 s | €0.070 | 1.93 |
-| Hybryda bez modelu decyzyjnego (regex + LLM) | 0.806 | 6.47 s | €0.203 | 0.83 |
-| Samo LLM: cały tekst + wzór JSON | 0.836 | 16.68 s | €0.354 | 1.00 |
-
-Adwersaryjny (seed 7): hybryda 0.906. Dla porównania (OpenRouter, poza UE: gemma-4-31b + clef-flash): kontrolny 0.897, adwersaryjny 0.913.
-
-### Koszt i szybkość: hybryda vs „wszystko w LLM” vs ablacja komponentów (OpenRouter, poza UE – porównawczo)
-
-`python eval/cost_report.py --data <zbiór> --mode <tryb>` (tryby: regex, hybrid, hybrid_no_llm, hybrid_no_jev, llm,
-llm_full, llm_schema, llm_vision), tabela: `python eval/summarize.py` (wyniki w `eval/results/`).
-Warianty „samo LLM” (gemma-4-31b) dostają typ dokumentu z góry i wzór JSON organizatora z komentarzami.
-
-### Treningowy UZP (180 dok.)
-
-| wariant | F1 | śr. czas / dok. | koszt / 1000 dok. | wywołań modeli / dok. |
-|---|---|---|---|---|
-| Same regexy/reguły (bez modeli) | 1.000 | 0.25 s | $0.000 | 0.00 |
-| **Hybryda (nasz system)** | 1.000 | 0.50 s | $0.022 | 0.72 |
-| Hybryda bez LLM (regex + model decyzyjny) | 1.000 | 0.44 s | $0.006 | 0.65 |
-| Hybryda bez modelu decyzyjnego (regex + LLM) | 1.000 | 0.27 s | $0.014 | 0.07 |
-| Samo LLM: tekst (8k znaków) + wzór JSON | 0.885 | 2.74 s | $0.275 | 1.00 |
-| Samo LLM: cały tekst + wzór JSON | 0.888 | 3.96 s | $0.347 | 1.00 |
-| Samo LLM: tekst + wymuszony JSON Schema | 0.891 | 3.05 s | $0.271 | 1.00 |
-| Samo LLM wizyjne: obrazy stron + wzór JSON | 0.712 | 5.66 s | $0.234 | 1.00 |
-
-### Adwersaryjny kontrolny (90 dok.)
-
-| wariant | F1 | śr. czas / dok. | koszt / 1000 dok. | wywołań modeli / dok. |
-|---|---|---|---|---|
-| Same regexy/reguły (bez modeli) | 0.535 | 0.08 s | $0.000 | 0.00 |
-| **Hybryda (nasz system)** | 0.884 | 1.82 s | $0.134 | 1.81 |
-| Hybryda bez LLM (regex + model decyzyjny) | 0.633 | 0.38 s | $0.010 | 0.76 |
-| Hybryda bez modelu decyzyjnego (regex + LLM) | 0.800 | 1.10 s | $0.103 | 0.83 |
-| Samo LLM: tekst (8k znaków) + wzór JSON | 0.827 | 2.43 s | $0.217 | 1.00 |
-| Samo LLM: cały tekst + wzór JSON | 0.831 | 2.48 s | $0.208 | 1.00 |
-| Samo LLM: tekst + wymuszony JSON Schema | 0.826 | 2.61 s | $0.207 | 1.00 |
-| Samo LLM wizyjne: obrazy stron + wzór JSON | 0.714 | 3.40 s | $0.193 | 1.00 |
-
-Udział metod wypełnienia pól (hybryda): dane UZP – 91% regex/reguły, 6% konfiguracja, 3% model decyzyjny, 0.1% LLM;
-dane adwersaryjne – 51% regex/reguły, 38% LLM, 7% konfiguracja, 4% model decyzyjny.
-Wnioski: hybryda jest dokładniejsza od każdego wariantu „samo LLM” i wielokrotnie tańsza/szybsza na typowych dokumentach;
-oba komponenty modelowe są potrzebne (bez LLM 0.63, bez modelu decyzyjnego 0.80, razem 0.88 na zbiorze kontrolnym).
+Odtworzenie (dane organizatora sklonowane obok projektu, `../tasks/uzp`):
+```bash
+python eval/evaluate.py --data ../tasks/uzp/dane                     # F1 per pole
+python eval/cost_report.py --data ../tasks/uzp/dane --mode hybrid    # + czas, koszt, udział metod (tryby: regex, llm_full)
+python eval/summarize.py privatemode                                 # tabela z eval/results/privatemode/
+```
 
 ## Wydajność
 

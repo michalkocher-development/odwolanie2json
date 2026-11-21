@@ -24,6 +24,7 @@ const METHODS = {
   regex: ["z tekstu", ""],
   rule: ["reguła", ""],
   item: ["z tekstu", ""],
+  candidate: ["z tekstu", ""],
   enum: ["słownik", ""],
   llm: ["AI", "ai"],
   const: ["stała", ""],
@@ -117,8 +118,9 @@ function analyzeDoc(data) {
       review.push({ ...item, why: `Ustalone przez model decyzyjny${pct}` });
     } else if (t && t.method === "llm" && t.grounded === false) {
       review.push({ ...item, why: "Nie potwierdzono dosłownie w tekście" });
-    } else if (isNull) {
-      review.push({ ...item, why: "Nie znaleziono w dokumencie" });
+    } else if (isNull && (!t || !t.status || t.status === "missing")) {
+      // tylko brak w polu, które zwykle występuje; typowe braki i pola „nie dotyczy” nie wymagają sprawdzania
+      review.push({ ...item, why: "Nie znaleziono w dokumencie, a pole zwykle występuje" });
     }
   }
 
@@ -129,9 +131,23 @@ function analyzeDoc(data) {
   };
 }
 
+// opis pustego pola wg statusu z API (found / absent_ok / not_applicable / missing)
+function nullText(t) {
+  if (t?.status === "not_applicable") return "nie dotyczy";
+  if (t?.status === "absent_ok") return "brak (typowe)";
+  return "nie znaleziono";
+}
+
+function nullExplanation(t) {
+  const note = t?.note ? esc(t.note) : "";
+  if (t?.status === "not_applicable") return `Pole nie dotyczy tego dokumentu${note ? ": " + note : ""}.`;
+  if (t?.status === "absent_ok") return `Brak wartości jest tu normalny${note ? ": " + note : ""}.`;
+  return "Tej informacji nie znaleziono w dokumencie, choć zwykle występuje – warto sprawdzić.";
+}
+
 function buildCitation(t, isNull) {
-  if (isNull && (!t || (!t.quote && !t.method))) {
-    return '<div class="cite">Tej informacji nie znaleziono w dokumencie. W pliku JSON pole ma wartość <code>null</code>.</div>';
+  if (isNull && (!t || !t.quote)) {
+    return `<div class="cite">${nullExplanation(t)} W pliku JSON pole ma wartość <code>null</code>.</div>`;
   }
   if (!t) return '<div class="cite">Brak śladu dla tego pola.</div>';
 
@@ -173,7 +189,7 @@ function renderRow(docId, key, value, path, fields, flaggedPaths) {
   return `<div class="row" id="${rowDomId(docId, path)}">
     <button class="row-b" type="button" aria-expanded="false">
       <span class="k">${esc(label(key))}</span>
-      <span class="v ${isNull ? "null" : ""} ${isFlagged && !isNull ? "flag" : ""}">${isNull ? "nie występuje w dokumencie" : esc(value)}</span>
+      <span class="v ${isNull ? "null" : ""} ${isFlagged && !isNull ? "flag" : ""}">${isNull ? nullText(t) : esc(value)}</span>
       <span class="src">${srcTag(t)}${ICONS.chev}</span>
     </button>
     ${buildCitation(t, isNull)}
@@ -365,7 +381,9 @@ function renderMain() {
         </div>
       </div>
       <div class="p-body">
-        <div class="err-box">Dokument nie pasuje do żadnej z obsługiwanych klas (odwołanie, pełnomocnictwo, potwierdzenie przelewu) — został pominięty.</div>
+        <div class="err-box">Dokument nie pasuje do żadnej z obsługiwanych klas (odwołanie, pełnomocnictwo, potwierdzenie przelewu).
+          Zgodnie z ustaleniem z organizatorem wynikiem jest pusty obiekt JSON (w trybie wsadowym: plik z <code>{}</code>).</div>
+        <pre class="json-pre" style="margin-top:12px">{}</pre>
       </div>
     </article>`;
     return;

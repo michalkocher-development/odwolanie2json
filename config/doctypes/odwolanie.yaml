@@ -3,6 +3,7 @@ name: odwolanie
 head_chars: 8000
 
 classify:
+  ocr_pages: 3                           # skan: liczba stron do OCR (kluczowe dane są na pierwszych stronach)
   description: "Odwołanie do Krajowej Izby Odwoławczej (pismo wykonawcy zaskarżające czynność zamawiającego w przetargu)"   # opcja dla modelu decyzyjnego, gdy słowa kluczowe nie wystarczą
   filename_hints: [odwol]
   filename_weight: 1

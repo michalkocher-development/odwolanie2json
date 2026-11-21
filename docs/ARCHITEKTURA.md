@@ -11,7 +11,7 @@ PDF
  │  app/pdf_text.py      tekst z układem (pdfplumber, MIT) + wariant „strumień” – kolejność strumienia PDF, tabele
  ▼                       komórka po komórce (pypdfium2, BSD/Apache); skan -> OCR modelem wizyjnym (render pypdfium2)
 klasyfikacja             app/pipeline.py: słowa kluczowe z YAML (classify) -> gdy niepewne: model decyzyjny
- │                       (opcje = classify.description każdej klasy + „inny dokument” -> pominięty)
+ │                       (opcje = classify.description każdej klasy + „inny dokument” -> plik z `{}`)
  ▼
 silnik ekstrakcji        app/engine.py: interpreter config/doctypes/<klasa>.yaml
  │   1. sekcje (kotwice), regexy, reguły, słowniki, normalizatory (app/normalize.py, app/names.py)
@@ -62,7 +62,8 @@ Ogranicznik zapytań po stronie klienta (`rate_limit_rpm`) i obsługa HTTP 429 �
 
 Pomiary (`eval/`, wyniki w README): na dokumentach UZP 91% pól wypełniają regexy/reguły, LLM jest wołany w 13 na 180
 dokumentów; na nietypowych układach rośnie udział modeli. Hybryda jest dokładniejsza niż „cały dokument do LLM”
-(UZP: 0.998 vs 0.893 F1; zbiór kontrolny: 0.885 vs 0.836) i kilkukrotnie tańsza.
+(UZP: 0.998 vs 0.905 F1; zbiór kontrolny: 0.881 vs 0.822), szybsza (UZP: 0.55 s vs 3.03 s na dokument)
+i kilkukrotnie tańsza.
 
 ## Przejrzystość
 

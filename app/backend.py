@@ -13,6 +13,7 @@ Env: PROVIDER, OPENROUTER_API_KEY (z .env), OPENAI_BASE_URL, OPENAI_MODEL.
 from __future__ import annotations
 
 import base64
+import contextvars
 import json
 import logging
 import os
@@ -112,6 +113,26 @@ def _chat(messages: list[dict[str, Any]], extra: dict[str, Any] | None = None, m
 
 _rate_lock = threading.Lock()
 _sent: list[float] = []  # znaczniki czasu wysłanych zapytań (okno 60 s)
+_deadline: contextvars.ContextVar[float | None] = contextvars.ContextVar("deadline", default=None)
+
+
+class BudgetExceeded(TimeoutError):
+    """Budżet czasu dokumentu wyczerpany – kolejne wywołania modeli są pomijane (pola zostają z reguł)."""
+
+
+def set_deadline(seconds: float) -> contextvars.Token:
+    """Budżet czasu bieżącego dokumentu (wątek/kontekst); 0 = bez limitu."""
+    return _deadline.set(time.time() + seconds if seconds > 0 else None)
+
+
+def reset_deadline(token: contextvars.Token) -> None:
+    _deadline.reset(token)
+
+
+def _check_deadline(extra: float = 0.0) -> None:
+    d = _deadline.get()
+    if d is not None and time.time() + extra > d:
+        raise BudgetExceeded("budżet czasu dokumentu wyczerpany")
 
 
 def _throttle(rpm: int) -> None:
@@ -127,6 +148,7 @@ def _throttle(rpm: int) -> None:
                 _sent.append(now)
                 return
             wait = 60 - (now - _sent[0]) + 0.05
+        _check_deadline(wait)  # nie czekamy w kolejce dłużej, niż pozwala budżet dokumentu
         time.sleep(wait)
 
 
@@ -142,11 +164,14 @@ def _post(path: str, body: dict[str, Any], kind: str = "llm") -> dict[str, Any]:
     limited = 0  # odpowiedzi 429 nie zużywają puli prób (tylko czekamy), maks. 30 razy
     attempt = 0
     while attempt < retries:
+        _check_deadline()
         _throttle(int(s.get("rate_limit_rpm", 0)))
         req = urllib.request.Request(s["base_url"] + path, data=data, headers=headers)
+        d = _deadline.get()
+        timeout = s.get("timeout", 180) if d is None else max(5.0, min(s.get("timeout", 180), d - time.time()))
         try:
             t0 = time.time()
-            with urllib.request.urlopen(req, timeout=s.get("timeout", 180)) as r:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
                 out = json.load(r)
             if isinstance(out, dict) and out.get("error") and len(out) == 1:
                 raise RuntimeError(str(out["error"])[:300])

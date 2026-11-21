@@ -67,14 +67,32 @@ def pdf_to_texts(path: Path, max_pages: int | None = None) -> tuple[str, str, st
             return text, "text", stream_text(path, n_pages)
     s = settings()
     if "vlm" in s.get("engines", ["vlm"]):
-        try:
-            out = _vlm(render_pages(path, s.get("max_pages", 3)))
-            if out.strip():
-                return out, "ocr:vlm", None
-        except Exception as e:
-            log.warning("OCR nieudany dla %s: %s", path.name, e)
+        # skan: najpierw tylko `ocr.first_pages` stron (do klasyfikacji); pipeline dociąga resztę wg klasy dokumentu
+        out = "\f".join(ocr_range(path, 0, s.get("first_pages", 1)))
+        if out.strip():
+            return out, "ocr:vlm", None
     log.warning("Brak warstwy tekstowej i OCR niedostępny: %s", path)
     return text, "empty", None
+
+
+def ocr_range(path: Path, start: int, end: int) -> list[str]:
+    """OCR stron [start, end) modelem wizyjnym – strony równolegle (`ocr.parallel_pages`). Błąd strony = pusty tekst."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    images = render_pages(path, end, start)
+    if not images:
+        return []
+    timeout = settings().get("timeout", 300)
+
+    def one(png: bytes) -> str:
+        try:
+            return backend.vision_text(VLM_PROMPT, png, timeout)
+        except Exception as e:
+            log.warning("OCR strony nieudany (%s): %s", path.name, e)
+            return ""
+
+    with ThreadPoolExecutor(max_workers=max(1, int(settings().get("parallel_pages", 3)))) as ex:
+        return list(ex.map(one, images))
 
 
 def stream_text(path: Path, n_pages: int) -> str | None:
@@ -99,14 +117,23 @@ def stream_text(path: Path, n_pages: int) -> str | None:
     return _clean(text)
 
 
-def render_pages(path: Path, max_pages: int) -> list[bytes]:
-    """Pierwsze strony jako PNG (~`ocr.image_width` px szerokości) – pypdfium2."""
+def page_count(path: Path) -> int:
+    with _PDFIUM_LOCK:
+        doc = pdfium.PdfDocument(str(path))
+        try:
+            return len(doc)
+        finally:
+            doc.close()
+
+
+def render_pages(path: Path, max_pages: int, start: int = 0) -> list[bytes]:
+    """Strony [start, max_pages) jako PNG (~`ocr.image_width` px szerokości) – pypdfium2."""
     width = settings().get("image_width", 1100)  # ~1100 px wystarcza dla A4; większe obrazy spowalniają
     out = []
     with _PDFIUM_LOCK:
         doc = pdfium.PdfDocument(str(path))
         try:
-            for i in range(min(max_pages, len(doc))):
+            for i in range(start, min(max_pages, len(doc))):
                 page = doc[i]
                 img = page.render(scale=width / page.get_width()).to_pil()
                 buf = io.BytesIO()
@@ -118,6 +145,3 @@ def render_pages(path: Path, max_pages: int) -> list[bytes]:
     return out
 
 
-def _vlm(images: list[bytes]) -> str:
-    timeout = settings().get("timeout", 300)
-    return "\f".join(backend.vision_text(VLM_PROMPT, png, timeout) for png in images)

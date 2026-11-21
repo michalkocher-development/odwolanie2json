@@ -3,22 +3,22 @@
   "mode": "llm_full",
   "provider": "privatemode",
   "documents": 90,
-  "f1": 0.8361,
-  "precision": 0.8369,
-  "recall": 0.8353,
-  "wall_seconds": 189.4,
-  "avg_doc_seconds": 16.68,
-  "workers": 8,
+  "f1": 0.8219,
+  "precision": 0.8251,
+  "recall": 0.8186,
+  "wall_seconds": 231.3,
+  "avg_doc_seconds": 2.57,
+  "workers": 1,
   "usage": {
     "llm": {
       "calls": 90,
-      "prompt_tokens": 96572,
-      "completion_tokens": 19294,
-      "cost": 0.031855,
-      "seconds": 308.978064
+      "prompt_tokens": 97531,
+      "completion_tokens": 19299,
+      "cost": 0.032051,
+      "seconds": 227.123957
     }
   },
-  "cost_total_usd": 0.031855,
-  "cost_per_1000_docs_usd": 0.3539,
+  "cost_total_usd": 0.032051,
+  "cost_per_1000_docs_usd": 0.3561,
   "model_calls_per_doc": 1.0
 }

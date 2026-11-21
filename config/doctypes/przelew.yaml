@@ -4,6 +4,7 @@
 name: przelew
 
 classify:
+  ocr_pages: 1                           # skan: liczba stron do OCR (kluczowe dane są na pierwszych stronach)
   description: "Potwierdzenie przelewu / dowód wpłaty z banku (np. wpis od odwołania, opłata skarbowa)"   # opcja dla modelu decyzyjnego, gdy słowa kluczowe nie wystarczą
   filename_hints: [przelew, potwierdzenie]
   filename_weight: 1

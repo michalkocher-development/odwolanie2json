@@ -2,6 +2,7 @@
 name: pelnomocnictwo
 
 classify:
+  ocr_pages: 2                           # skan: liczba stron do OCR (kluczowe dane są na pierwszych stronach)
   description: "Pełnomocnictwo (umocowanie osoby do reprezentowania wykonawcy)"   # opcja dla modelu decyzyjnego, gdy słowa kluczowe nie wystarczą
   filename_hints: [pelnomoc, pełnomoc]
   filename_weight: 1

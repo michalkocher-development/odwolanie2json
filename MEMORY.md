@@ -23,8 +23,10 @@ Krótkie, kluczowe fakty dla zespołu i agentów. Szczegóły: `README.md`, `doc
 - Alternatywy: `openrouter` (porównawczo, poza UE), `ollama`/`jev_local` (własne serwery, adresy przez env).
 
 ## Wyniki (eval/results/<dostawca>/)
-- Privatemode (UE), ekstraktor pdfplumber+pypdfium2: UZP 0.998, kontrolny adwersaryjny 0.883, adwersaryjny 0.897
-  (z PyMuPDF było 0.999 / 0.885 / 0.906); samo LLM: 0.893 / 0.836.
+- Obecna wersja (Privatemode, pdfplumber+pypdfium2, pomiar sekwencyjny): UZP 0.998 (samo LLM 0.905), kontrolny 0.881
+  (samo LLM 0.822), adwersaryjny 0.900, skany 0.907; same regexy: 0.998 / 0.563 / skany 0.600;
+  czas/dok. UZP 0.55 s vs 3.03 s (samo LLM), kontrolny 2.44 s vs 2.57 s; 90 skanów w 4.6 min.
+- Dokument spoza klas -> plik `{}` (DC). Skany: OCR etapami (classify.ocr_pages), budżet czasu pipeline.doc_time_budget_s.
 - Docker: obraz zbudowany i sprawdzony – `docker compose up -d web` (API OK) i `docker compose run --rm cli` (wyniki zgodne ze wzorcem).
 - Na danych UZP 91% pól z regexów, LLM w 13/180 dok.; koszt ~€0.07–0.30 / 1000 dok.
 - Zmierzone i odrzucone: weryfikacja pól modelem (`verify`) – +0.005 F1 przy 3× koszcie (wyłączona).

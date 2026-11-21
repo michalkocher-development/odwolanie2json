@@ -1,0 +1,48 @@
+Uwaga: koszt liczony tylko dla provider=openrouter
+{
+  "dataset": "scans",
+  "mode": "hybrid",
+  "provider": "privatemode",
+  "documents": 90,
+  "f1": 0.9073,
+  "precision": 0.9273,
+  "recall": 0.8881,
+  "wall_seconds": 273.8,
+  "avg_doc_seconds": 23.73,
+  "workers": 8,
+  "usage": {
+    "ocr": {
+      "calls": 112,
+      "prompt_tokens": 261184,
+      "completion_tokens": 56735,
+      "cost": 0.089115,
+      "seconds": 1310.852846
+    },
+    "decision": {
+      "calls": 80,
+      "prompt_tokens": 38007,
+      "completion_tokens": 80,
+      "cost": 0.007653,
+      "seconds": 48.715064
+    },
+    "llm": {
+      "calls": 59,
+      "prompt_tokens": 69124,
+      "completion_tokens": 9941,
+      "cost": 0.020286,
+      "seconds": 217.738045
+    }
+  },
+  "cost_total_usd": 0.117054,
+  "cost_per_1000_docs_usd": 1.3006,
+  "model_calls_per_doc": 2.79,
+  "filled_fields_by_method": {
+    "regex/reguły": "514 (52.7%)",
+    "LLM": "344 (35.2%)",
+    "konfiguracja": "86 (8.8%)",
+    "model decyzyjny": "32 (3.3%)"
+  },
+  "docs_with_llm_call": "57/90",
+  "docs_with_decision_call": "30/90",
+  "docs_classified_by_model": "0/90"
+}

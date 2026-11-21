@@ -16,6 +16,7 @@ decisions:
 # Przetwarzanie: liczba dokumentów obsługiwanych równolegle (wątki; czas to głównie oczekiwanie na modele). Env: WORKERS
 pipeline:
   workers: 8
+  doc_time_budget_s: 150                 # budżet czasu na dokument: po przekroczeniu bez kolejnych wywołań modeli (wynik z reguł)
 
 # ---------------------------------------------------------------- provider: privatemode (UE)
 privatemode:
@@ -76,6 +77,8 @@ llm:
 # OCR skanów (PDF bez warstwy tekstowej). Silniki próbowane kolejno.
 ocr:
   engines: [vlm, tesseract]                # vlm = model wizyjny przez Ollama (pula hostów i model z sekcji llm)
-  max_pages: 3                             # kluczowe dane są na pierwszych stronach
+  max_pages: 3                             # domyślna liczba stron OCR (klasa może ustawić classify.ocr_pages)
+  first_pages: 1                           # skan: najpierw OCR tylu stron (do klasyfikacji), resztę wg klasy
+  parallel_pages: 3                        # strony jednego dokumentu OCR-owane równolegle
   image_width: 1100                        # px; większe obrazy spowalniają i potrafią dać błąd 500
   timeout: 300

@@ -75,9 +75,40 @@ def classify_model(text: str) -> tuple[str | None, dict[str, Any]]:
     return names[idx], info
 
 
+def _settings() -> dict[str, Any]:
+    f = CONFIG / "settings.yaml"
+    return yaml.safe_load(f.read_text(encoding="utf-8")) if f.exists() else {}
+
+
 def process_pdf(pdf: Path) -> tuple[str | None, Any, dict[str, Any]]:
+    """Jeden dokument w budżecie czasu (`pipeline.doc_time_budget_s`): po jego przekroczeniu wywołania modeli
+    są pomijane, a wynik powstaje z tego, co już ustalono (reguły, wcześniejsze odpowiedzi modeli)."""
+    from . import backend
+
+    budget = float((_settings().get("pipeline") or {}).get("doc_time_budget_s", 0) or 0)
+    token = backend.set_deadline(budget)
+    try:
+        return _process_pdf(pdf)
+    finally:
+        backend.reset_deadline(token)
+
+
+def _process_pdf(pdf: Path) -> tuple[str | None, Any, dict[str, Any]]:
+    from . import pdf_text
+
     text, method, flow = pdf_to_texts(pdf)
     doctype, scores = classify(text, pdf.name)
+    if method.startswith("ocr") and doctype is None and text.strip():
+        doctype, _ = classify_model(text)
+    if method.startswith("ocr") and doctype:
+        # skan: OCR objął pierwszą stronę – dociągamy tyle stron, ile potrzebuje klasa (classify.ocr_pages)
+        need = int(load_doctypes()[doctype].get("classify", {}).get("ocr_pages")
+                   or pdf_text.settings().get("max_pages", 3))
+        done = text.count("\f") + 1
+        if need > done:
+            more = pdf_text.ocr_range(pdf, done, need)
+            if more:
+                text = "\f".join([text, *more])
     info: dict[str, Any] = {"file": pdf.name, "text_method": method, "class_scores": scores, "doctype": doctype,
                             "class_method": "keywords" if doctype else None}
     if doctype is None and text.strip():
@@ -99,24 +130,34 @@ def workers() -> int:
     return int(os.environ.get("WORKERS", (s.get("pipeline") or {}).get("workers", 8)))
 
 
-def _safe_process(pdf: Path) -> tuple[str | None, Any, dict[str, Any]] | None:
+def _safe_process(pdf: Path) -> tuple[str | None, Any, dict[str, Any]]:
+    """Nigdy nie przerywa partii: błąd dokumentu (np. uszkodzony PDF) -> wynik pusty `{}` + opis błędu w śladzie."""
     try:
         return process_pdf(pdf)
-    except Exception:
+    except Exception as e:
         log.exception("Błąd przetwarzania %s", pdf)
-        return None
+        return None, None, {"file": pdf.name, "error": f"{type(e).__name__}: {e}"}
 
 
-def process_tree(inp: Path, out: Path, trace_dir: Path | None = None) -> int:
-    """Przetwarza wszystkie PDF-y z drzewa `inp` równolegle (wątki: czas to głównie I/O sieciowe do modeli)."""
+def process_tree(inp: Path, out: Path, trace_dir: Path | None = None, progress: bool = False) -> int:
+    """Przetwarza wszystkie PDF-y z drzewa `inp` równolegle (wątki: czas to głównie I/O sieciowe do modeli).
+    Każdy PDF dostaje plik wynikowy (także dokument spoza klas lub błąd -> `{}`)."""
+    import sys
+    import time
+    from concurrent.futures import as_completed
+
     pdfs = sorted(inp.rglob("*.pdf"))
-    n = 0
+    n, t0 = 0, time.time()
     with ThreadPoolExecutor(max_workers=max(1, workers())) as ex:
-        results = ex.map(_safe_process, pdfs)  # zachowuje kolejność
-        for pdf, res in zip(pdfs, results):
-            if res is None:
-                continue
-            n += _write(pdf, inp, out, trace_dir, *res)
+        futures = {ex.submit(_safe_process, pdf): pdf for pdf in pdfs}
+        for i, fut in enumerate(as_completed(futures), 1):
+            pdf = futures[fut]
+            n += _write(pdf, inp, out, trace_dir, *fut.result())
+            if progress:
+                el = time.time() - t0
+                eta = el / i * (len(pdfs) - i)
+                print(f"[{i}/{len(pdfs)}] {pdf.relative_to(inp)}  ({el:.0f} s, pozostało ~{eta:.0f} s)",
+                      file=sys.stderr, flush=True)
     return n
 
 
@@ -128,11 +169,13 @@ def _write(
         t = trace_dir / rel
         t.parent.mkdir(parents=True, exist_ok=True)
         t.write_text(json.dumps(info, ensure_ascii=False, indent=2), encoding="utf-8")
-    if doctype is None:
-        log.info("Pominięto (nie rozpoznano typu): %s", rel)
-        return 0
     dst = out / rel
     dst.parent.mkdir(parents=True, exist_ok=True)
+    if doctype is None:
+        # dokument spoza klas: plik z pustym obiektem {} (ustalenie z organizatorem)
+        dst.write_text("{}", encoding="utf-8")
+        log.info("Dokument spoza klas -> {}: %s", rel)
+        return 1
     dst.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     log.info("%s -> %s (%s)", pdf.relative_to(inp), rel, doctype)
     return 1

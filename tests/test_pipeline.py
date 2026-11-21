@@ -19,7 +19,7 @@ def test_classification():
     assert process_pdf(CASE / "potwierdzenie_przelewu.pdf")[0] == "przelew"
 
 
-def test_unknown_document_is_skipped():
+def test_unknown_document_is_not_classified():
     doctype, result, _ = process_pdf(CASE / "ogloszenie_ted.pdf")
     assert doctype is None and result is None
 
@@ -36,6 +36,14 @@ def test_output_tree_mirrors_input(tmp_path):
     for f in ("odwolanie.pdf", "ogloszenie_ted.pdf"):
         (inp / f).write_bytes((CASE / f).read_bytes())
     n = process_tree(tmp_path / "input", out, None)
-    assert n == 1
-    assert (out / "case1" / "odwolanie.json").exists()          # ta sama nazwa co PDF
-    assert not (out / "case1" / "ogloszenie_ted.json").exists()  # dokument spoza klas pominięty
+    assert n == 2
+    assert (out / "case1" / "odwolanie.json").exists()                              # ta sama nazwa co PDF
+    assert (out / "case1" / "ogloszenie_ted.json").read_text(encoding="utf-8") == "{}"  # spoza klas -> {}
+
+
+def test_broken_pdf_still_gets_output_file(tmp_path):
+    inp, out = tmp_path / "input" / "case1", tmp_path / "output"
+    inp.mkdir(parents=True)
+    (inp / "uszkodzony.pdf").write_bytes(b"%PDF-1.4 to nie jest poprawny PDF")
+    assert process_tree(tmp_path / "input", out, None) == 1
+    assert (out / "case1" / "uszkodzony.json").read_text(encoding="utf-8") == "{}"
