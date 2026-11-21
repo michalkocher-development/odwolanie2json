@@ -1,0 +1,24 @@
+{
+  "dataset": "adversarial_holdout",
+  "mode": "llm_full",
+  "provider": "privatemode",
+  "documents": 90,
+  "f1": 0.8361,
+  "precision": 0.8369,
+  "recall": 0.8353,
+  "wall_seconds": 189.4,
+  "avg_doc_seconds": 16.68,
+  "workers": 8,
+  "usage": {
+    "llm": {
+      "calls": 90,
+      "prompt_tokens": 96572,
+      "completion_tokens": 19294,
+      "cost": 0.031855,
+      "seconds": 308.978064
+    }
+  },
+  "cost_total_usd": 0.031855,
+  "cost_per_1000_docs_usd": 0.3539,
+  "model_calls_per_doc": 1.0
+}

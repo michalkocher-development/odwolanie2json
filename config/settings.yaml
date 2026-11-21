@@ -1,11 +1,62 @@
+# Dostawca modeli (env: PROVIDER) = nazwa profilu poniżej:
+#   privatemode – Privatemode (Edgeless Systems GmbH, DE), serwery w UE, GLM-5.3-Flash (MIT). Wersja dla jury
+#                 (regulamin: otwarte modele + API u usługodawcy i na serwerze w UE). Klucz w .env: PRIVATEMODE_API_KEY
+#   openrouter  – OpenRouter (serwery poza UE – tylko do porównań), gemma-4-31b + clef-flash
+#   ollama      – własne serwery: Ollama (sekcja llm) + JEV-9B na vLLM (sekcja jev). Adresy przez env LLM_URL / JEV_URL
+provider: privatemode
+
+# Model decyzyjny (pola z kluczem `jev:` w YAML). Env: DECISION_PROVIDER
+#   api       – dostawca z profilu: decision_mode systemone (endpoint /systemone) albo logprobs (technika System One na LLM)
+#   jev_local – JEV-9B (Apache 2.0) na naszym vLLM (/v1/decide, sekcja jev)
+decisions:
+  provider: api
+  verify: false                          # weryfikacja pól z `verify:` modelem decyzyjnym; zmierzone: +0.005 F1 przy 3x koszcie -> wyłączona
+  verify_threshold: 0.1                  # poniżej progu wartość z regexu jest odrzucana (gdy verify: true)
+
 # Przetwarzanie: liczba dokumentów obsługiwanych równolegle (wątki; czas to głównie oczekiwanie na modele). Env: WORKERS
 pipeline:
   workers: 8
 
-# Ustawienia modeli. Nadpisanie adresu: zmienna środowiskowa JEV_URL; wyłączenie: JEV_DISABLE=1
+# ---------------------------------------------------------------- provider: privatemode (UE)
+privatemode:
+  base_url: https://proxyless-api.privatemode.ai/v1   # API bez lokalnego proxy (szyfrowanie pamięci, bez atestacji po stronie klienta)
+  model: glm-5.3-flash                     # GLM-5.3-Flash (MIT, open weights, obrazy) – ekstrakcja, OCR i decyzje
+  api_key_env: PRIVATEMODE_API_KEY
+  price_in: 0.20                           # EUR / 1M tokenów (cennik Privatemode, bez VAT) – do pomiarów kosztu
+  price_out: 0.65
+  decision_mode: logprobs                  # decyzje: technika System One (prefill "answer=", allowed_token_ids, logprobs)
+  timeout: 180
+  retries: 5
+  rate_limit_rpm: 95                       # limit Privatemode: 100 zapytań/min (plan Standard; trial: 40) – z zapasem
+  extra_body:
+    reasoning_effort: none                 # GLM domyślnie "max" (długie rozumowanie) – wyłączone: szybciej i taniej
+  decision_extra_body:
+    reasoning_effort: none
+    chat_template_kwargs: {enable_thinking: false}
+
+# ---------------------------------------------------------------- provider: openrouter
+openrouter:
+  base_url: https://openrouter.ai/api/v1   # env OPENAI_BASE_URL (dowolny serwer OpenAI-compatible, np. Ollama /v1)
+  model: google/gemma-4-31b-it             # open-weights; ten sam model co gemma4:31b na naszych serwerach. Env OPENAI_MODEL
+  decision_model: cloudflare/clef-flash    # model decyzyjny (endpoint /systemone), Apache 2.0, baza Qwen3.5-9B. Env DECISION_MODEL
+  api_key_env: OPENROUTER_API_KEY
+  timeout: 180
+  retries: 5
+  headers:
+    X-Title: odwolanie2json
+  extra_body:                              # parametry OpenRouter dołączane do każdego zapytania
+    usage: {include: true}                 # koszt w odpowiedzi (pomiary)
+    provider:
+      require_parameters: true             # tylko dostawcy obsługujący structured outputs
+      data_collection: deny                # bez dostawców trenujących na danych
+    reasoning:
+      enabled: false                       # bez trybu "thinking" – szybciej i taniej
+
+# ---------------------------------------------------------------- provider: ollama
+# JEV: decyzje (pola z kluczem `jev:`). Env: JEV_URL; wyłączenie: JEV_DISABLE=1
 jev:
   enabled: true
-  base_url: http://192.168.192.207:8100   # frankencave01, vLLM serve_decide.py (System 1: /v1/decide)
+  base_url: http://localhost:8100         # serwer vLLM z JEV-9B (System 1: /v1/decide); env JEV_URL
   timeout: 60
   workers: 16                             # równoległe zapytania
 
@@ -13,8 +64,7 @@ jev:
 llm:
   enabled: true
   base_url:                               # pula hostów Ollama; zapytania idą do najmniej obciążonego
-    - http://192.168.192.211:11434        # rtx5090 (32 GB)
-    - http://192.168.192.210:11434        # rtx4090 (2x24 GB) – host gemmy zespołu
+    - http://localhost:11434              # serwer(y) Ollama z gemma4:31b; env LLM_URL (kilka adresów po przecinku)
   cooldown: 60                            # s pomijania hosta po błędzie połączenia
   model: gemma4:31b
   num_ctx: 8192

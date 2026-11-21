@@ -2,6 +2,7 @@
 name: pelnomocnictwo
 
 classify:
+  description: "Pełnomocnictwo (umocowanie osoby do reprezentowania wykonawcy)"   # opcja dla modelu decyzyjnego, gdy słowa kluczowe nie wystarczą
   filename_hints: [pelnomoc, pełnomoc]
   filename_weight: 1
   min_score: 3
@@ -32,10 +33,13 @@ output:
       _each_fallback: whole
       data:
         imie_nazwisko:
+          applies_if: {field: typ, equals: osoba_fizyczna, note: "mocodawcą jest osoba prawna"}
+          # tylko mocodawca – osoba fizyczna / przedsiębiorca (przy spółce "niżej podpisany" to podpisujący)
+          within: '(?s).*(?:prowadząc\w*\s+działalność|CEIDG|Centraln\w+\s+Ewidencji).*'
           regex: 'niżej\s+podpisan\w*\s+([A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+\s+[A-ZŁŚŻŹĆ][a-ząćęłńóśźż-]+)'
           ci: false
           normalize: person
-        krs: {regex: 'KRS\W{0,3}(\d{10})'}
+        krs: {regex: 'KRS\D{0,25}?(\d{10})', llm: "Numer KRS mocodawcy (10 cyfr), jeśli podany", absent_ok: "osoba fizyczna / przedsiębiorca z CEIDG nie ma KRS"}
         nazwa:
           regex:
             - '(?s)Mocodawcą\s+jest\s+(.+?),\s*(?:ul\.|al\.|pl\.|os\.)'
@@ -47,7 +51,8 @@ output:
             - '^[ \t]*(?![^\n]*\d{4}\s*(?:r\.?|roku)?[ \t]*$)([^\n]+?),\s*(?:ul\.|al\.|pl\.|os\.)'
           normalize: company
           llm: "Pełna nazwa mocodawcy (podmiotu udzielającego pełnomocnictwa)"
-        nip: {regex: 'NIP\W{0,3}(\d[\d -]{8,12}\d)', normalize: digits, validate: '\d{10}', llm: "NIP mocodawcy (10 cyfr)"}
+          verify: "pełna nazwa mocodawcy (podmiotu udzielającego pełnomocnictwa)"
+        nip: {regex: 'NIP\W{0,15}(?:PL)?\s?(\d[\d -]{8,12}\d)', normalize: digits, validate: '\d{10}', llm: "NIP mocodawcy (10 cyfr)"}
         typ:
           rules:
             - {pattern: 'prowadząc\w*\s+działalność|Centraln\w+\s+Ewidencji|CEIDG', value: osoba_fizyczna}
@@ -57,14 +62,17 @@ output:
           _ci: false
           _blocks: '^[ \t]*W\s+imieniu\b[^\n]*:'   # konsorcjum: blok podpisów per członek (wg kolejności)
           _each: '(?:^|[ \t]{2,})(?!(?:Prezes|Wiceprezes|Członek|Prokurent|Dyrektor|Właściciel|Wspólnik|Pełnomocni|Mocodawca|Zarząd)\b)([A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:-[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+)?[ \t]+[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:-[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+)?)(?=[ \t]{2,}|[ \t]*$|[ \t]+[a-ząćęłńóśźż(])'
-          imie_nazwisko: {take: item, normalize: person}
+          _llm: "Osoby podpisujące pełnomocnictwo w imieniu tego mocodawcy (bez pełnomocników)"
+          imie_nazwisko: {take: item, normalize: person, llm: "Imię i nazwisko podpisującego, w mianowniku"}
 
   pelnomocnicy:
     - _scope: all      # osoby z tytułem zawodowym (r. pr., adw.) w całym dokumencie, bez duplikatów
+      _llm: "Osoby, którym udzielono pełnomocnictwa (pełnomocnicy)"   # fallback, gdy regex nic nie znajdzie
       _ci: false
       _each: '((?:r\.\s?pr\.|adw\.|radc\w*\s+prawn\w*|adwokat\w*|apl\.\s?(?:adw|radc)\.?)\s+[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:-[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+)?\s+[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:-[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+)?(?:[^()\n]{0,30}\([^)]*\))?)'
       imie_nazwisko:
         regex: '^((?:\S+\.?\s+){0,2}?[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:-[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+)?\s+[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:-[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+)?)'
         ci: false
         normalize: person
-      pesel: {regex: 'PESEL\W{0,3}(\d{11})'}   # w danych referencyjnych PESEL jest tekstem
+        llm: "Imię i nazwisko pełnomocnika, w mianowniku, bez tytułu"
+      pesel: {regex: 'PESEL\W{0,15}(\d{11})', validate: '\d{11}', absent_ok: "PESEL pełnomocnika podawany rzadko"}   # w danych ref. jako tekst

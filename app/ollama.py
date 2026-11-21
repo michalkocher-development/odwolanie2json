@@ -19,7 +19,7 @@ from typing import Any
 
 import yaml
 
-os.environ.pop("SSLKEYLOGFILE", None)  # Avast ustawia go na urządzenie -> crash OpenSSL w urllib
+os.environ.pop("SSLKEYLOGFILE", None)  # niektóre antywirusy ustawiają go na urządzenie -> crash OpenSSL w urllib
 
 from .pipeline_paths import CONFIG  # noqa: E402
 

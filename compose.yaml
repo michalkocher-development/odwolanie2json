@@ -1,0 +1,32 @@
+# odwolanie2json – Docker Compose
+#   docker compose up -d web          -> interfejs web: http://localhost:8000
+#   docker compose run --rm cli       -> tryb wsadowy: ./input/<sprawa>/*.pdf -> ./output/<sprawa>/*.json (+ ./trace)
+# Klucz API: plik .env (wzór: .env.example), np. PRIVATEMODE_API_KEY=...
+# Konfiguracja (dostawca, modele, klasy dokumentów) montowana z ./config – zmiany bez przebudowy obrazu.
+
+services:
+  web:
+    build: .
+    image: odwolanie2json:latest
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./config:/app/config:ro
+    restart: unless-stopped
+
+  cli:
+    build: .
+    image: odwolanie2json:latest
+    profiles: ["cli"]
+    command: ["python", "-m", "app", "--input", "/app/input", "--output", "/app/output", "--trace", "/app/trace"]
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./config:/app/config:ro
+      - ./input:/app/input:ro
+      - ./output:/app/output
+      - ./trace:/app/trace

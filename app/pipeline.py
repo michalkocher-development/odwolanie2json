@@ -13,8 +13,8 @@ from typing import Any
 
 import yaml
 
-from . import engine
-from .pdf_text import pdf_to_text
+from . import engine, status
+from .pdf_text import pdf_to_texts
 
 log = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parent.parent
@@ -52,14 +52,43 @@ def classify(text: str, filename: str) -> tuple[str | None, dict[str, float]]:
     return (best if scores[best] >= min_score else None), scores
 
 
+CLASSIFY_QUESTION = "Jakiego rodzaju jest ten dokument?"
+OTHER = "Inny dokument (żaden z powyższych, np. ogłoszenie o zamówieniu, umowa, faktura)"
+
+
+def classify_model(text: str) -> tuple[str | None, dict[str, Any]]:
+    """Klasyfikacja modelem decyzyjnym, gdy słowa kluczowe nie wystarczą. Opcje = `classify.description` z YAML."""
+    from . import backend, jev
+
+    types = {n: s["classify"]["description"] for n, s in load_doctypes().items() if s.get("classify", {}).get("description")}
+    if not types or not jev.enabled():
+        return None, {}
+    names, options = list(types), list(types.values()) + [OTHER]
+    try:
+        idx, prob = backend.choose(re.sub(r"\s+", " ", text[:2500]), CLASSIFY_QUESTION, options)
+    except Exception as e:
+        log.warning("Klasyfikacja modelem nieudana: %s", e)
+        return None, {"error": str(e)}
+    info = {"answer": options[idx], "prob": prob}
+    if idx >= len(names) or (prob is not None and prob < 0.5):
+        return None, info
+    return names[idx], info
+
+
 def process_pdf(pdf: Path) -> tuple[str | None, Any, dict[str, Any]]:
-    text, method = pdf_to_text(pdf)
+    text, method, flow = pdf_to_texts(pdf)
     doctype, scores = classify(text, pdf.name)
-    info: dict[str, Any] = {"file": pdf.name, "text_method": method, "class_scores": scores, "doctype": doctype}
+    info: dict[str, Any] = {"file": pdf.name, "text_method": method, "class_scores": scores, "doctype": doctype,
+                            "class_method": "keywords" if doctype else None}
+    if doctype is None and text.strip():
+        doctype, minfo = classify_model(text)
+        info.update(doctype=doctype, class_method="decision" if doctype else "decision:none", class_decision=minfo)
     if doctype is None:
         return None, None, info
-    result, trace = engine.extract(text, load_doctypes()[doctype])
+    spec = load_doctypes()[doctype]
+    result, trace = engine.extract(text, spec, alt_text=flow)
     info["trace"] = trace
+    info["status"] = status.field_status(spec["output"], result)  # found / absent_ok / not_applicable / missing
     return doctype, result, info
 
 

@@ -3,6 +3,7 @@ name: odwolanie
 head_chars: 8000
 
 classify:
+  description: "Odwołanie do Krajowej Izby Odwoławczej (pismo wykonawcy zaskarżające czynność zamawiającego w przetargu)"   # opcja dla modelu decyzyjnego, gdy słowa kluczowe nie wystarczą
   filename_hints: [odwol]
   filename_weight: 1
   min_score: 3
@@ -17,12 +18,18 @@ classify:
     'POLECENIE PRZELEWU|POTWIERDZENIE (?:WYKONANIA|REALIZACJI)': 4
 
 sections:
+  # strefa nagłówka: od początku do pierwszej etykiety stron / adresu KIO / tytułu pisma (data i miejscowość pisma)
+  naglowek:
+    start: '\A'
+    end: '^[ \t]*(?:Odwołując|Zamawiając|Wykonawc|Strona\s+odwołując|Instytucj|ODWOŁANIE|dotyczy|Krajowa\s+Izba|Prezes\s+Krajowej|Do\s+Prezesa)'
+    max_chars: 800
   odwolujacy:
-    start: '^[ \t]*Odwołując[ya]\w*\s*:'
-    end: '^[ \t]*(?:Zamawiając\w*\s*:|dotyczy|Wykonawca|Przystępując|ODWOŁANIE|Prezes Krajowej)'
+    # nagłówek: "Odwołujący:", "ODWOŁUJĄCY" (sam w linii), "Wykonawca wnoszący odwołanie:", "Strona odwołująca –"
+    start: '^[ \t]*(?:Odwołując[ya]\w*|Wykonawc\w+\s+wnosząc\w*\s+odwołanie|Strona\s+odwołując\w*)(?:\s*\([^)]*\))?(?:\s*:|[ \t]*[–—-]|[ \t]*$)'
+    end: '^[ \t]*(?:(?:Zamawiając\w*|Instytucj\w+\s+zamawiając\w*)(?:\s*\([^)]*\))?(?:\s*:|[ \t]*$)|dotyczy|Wykonawca|Przystępując|ODWOŁANIE|Prezes Krajowej|Krajowa Izba)'
   zamawiajacy:
-    start: '^[ \t]*Zamawiając[ya]\w*(?:\s*\([^)]*\))?\s*:'
-    end: '^[ \t]*(?:Odwołując\w*\s*:|dotyczy|Wykonawca|Przystępując|ODWOŁANIE|Prezes Krajowej)'
+    start: '^[ \t]*(?:Zamawiając[ya]\w*|Instytucj\w+\s+zamawiając\w*)(?:\s*\([^)]*\))?(?:\s*:|[ \t]*[–—-]|[ \t]*$)'
+    end: '^[ \t]*(?:(?:Odwołując\w*|Strona\s+odwołując\w*)(?:\s*\([^)]*\))?(?:\s*:|[ \t]*[–—-]|[ \t]*$)|dotyczy|Wykonawca|Przystępując|ODWOŁANIE|Prezes Krajowej|Krajowa Izba)'
   dotyczy:
     start: '^[ \t]*dotyczy\b\s*:?'
     end: '^[ \t]*(?:ODWOŁANIE|Wartość zamówienia|Wpis od|Działając|Prezes Krajowej)'
@@ -46,10 +53,19 @@ enums:
 output:
   OdwolanieKIO:
     data:
+      absent_ok: "nagłówek pisma nie zawiera daty sporządzenia"
+      # linia nagłówka = cała linia „Miejscowość, [dn./dnia] DATA [r./roku]” (zdania z treści ciągną się dalej po dacie)
       scope: head
-      regex: '^[ \t]*[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:[ -][A-ZŁŚŻŹĆa-z][a-ząćęłńóśźż]+)*,?[ \t]+(?:dnia[ \t]+)?(\d{1,2}\.\d{1,2}\.\d{4}|\d{1,2}[ \t]+[a-ząćęłńóśźż]+[ \t]+\d{4})'
+      regex: '^[ \t]*(?!(?:Dnia|Data|W\s+dniu)\b)([A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:[ -][A-ZŁŚŻŹĆa-z][a-ząćęłńóśźż]+)*),?[ \t]+(?:dn\.|dnia)?[ \t]*(\d{1,2}\s+(?:stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września|października|listopada|grudnia)\s+\d{4}|\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{4}-\d{2}-\d{2})[ \t]*(?:r\.|roku)?[ \t]*$'
+      group: 2
       ci: false
       normalize: date
+      # gdy regex nie trafi: daty ze strefy nagłówka jako kandydaci; przy kilku wybiera model decyzyjny
+      candidates:
+        scope: naglowek
+        regex: '(\d{1,2}\s+(?:stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września|października|listopada|grudnia)\s+\d{4}|\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{4}-\d{2}-\d{2})'
+        question: "Która data jest datą sporządzenia tego pisma (z nagłówka, obok miejscowości)?"
+        none: "Brak daty sporządzenia pisma"
     czynnosc_dzien:
       llm: "Data zaskarżonej czynności zamawiającego (dotyczy pierwszego zarzutu), np. '9 października 2026'"
       regex:
@@ -57,6 +73,7 @@ output:
         - 'Zamawiając\w+\s+w\s+dniu\s+(\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4}|\d{1,2}\.\d{1,2}\.\d{4})'
       normalize: date
     czynnosc_powod_id:
+      prefer: jev                          # zmierzone: model 0.87–0.90 vs reguły 0.37–0.50 na nieznanych układach
       # kontekst = nagłówek pierwszego zarzutu + zdanie o zaskarżonej czynności
       within:
         - 'Zarzut\w*\s+nr\s*1\s*[–—-][^\n]*'
@@ -82,37 +99,56 @@ output:
         - {pattern: 'Specyfikac|\bSWZ\b|ogłoszenie\s+o\s+zamówieniu', value: 4}
     czynnosc_opis: {from: czynnosc_powod_id, enum: powody}
     miejscowosc:
+      absent_ok: "nagłówek pisma nie zawiera miejscowości"
       scope: head
-      regex: '^[ \t]*([A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:[ -][A-ZŁŚŻŹĆa-z][a-ząćęłńóśźż]+)*),?[ \t]+(?:dnia[ \t]+)?(?:\d{1,2}\.\d{1,2}\.\d{4}|\d{1,2}[ \t]+[a-ząćęłńóśźż]+[ \t]+\d{4})'
+      regex: '^[ \t]*(?!(?:Dnia|Data|W\s+dniu)\b)([A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:[ -][A-ZŁŚŻŹĆa-z][a-ząćęłńóśźż]+)*),?[ \t]+(?:dn\.|dnia)?[ \t]*(\d{1,2}\s+(?:stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września|października|listopada|grudnia)\s+\d{4}|\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{4}-\d{2}-\d{2})[ \t]*(?:r\.|roku)?[ \t]*$'
+      group: 1
       ci: false
       normalize: strip
+      # gdy regex nie trafi: słowa z wielkiej litery w linii z datą w strefie nagłówka; forma po „w/we” -> mianownik
+      candidates:
+        scope: naglowek
+        regex: '(?:^|(?<=\s)|(?<=,))([A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:[ -][A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+)*)'
+        within_line: '\d{1,2}\s+(?:stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września|października|listopada|grudnia)\s+\d{4}|\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{4}-\d{2}-\d{2}'
+        exclude: [Sporządzono, Dnia, Dn, Data]
+        question: "Która nazwa to miejscowość, w której sporządzono pismo?"
+        none: "Brak miejscowości"
+        nominative: true
 
   Odwolujacy:
     - _scope: odwolujacy
-      krs: {regex: 'KRS\W{0,3}(\d{10})'}
+      krs: {regex: 'KRS\D{0,25}?(\d{10})', llm: "Numer KRS podmiotu (10 cyfr), jeśli podany", absent_ok: "nie każdy podmiot ma KRS (np. przedsiębiorca z CEIDG)"}
       nazwa:
         llm: "Pełna nazwa Odwołującego (przy konsorcjum: nazwa Lidera konsorcjum)"
+        verify: "pełna nazwa Odwołującego (wykonawcy wnoszącego odwołanie)"
         regex:
           - 'Lider\w*[^\n]*:[ \t]*\n\s*([^\n]+)'          # konsorcjum -> nazwa lidera
           - '\A\s*(?!Konsorcjum)([^\n]+)'
-        normalize: strip
-      nip: {regex: 'NIP\W{0,3}(\d[\d -]{8,12}\d)', normalize: digits, validate: '\d{10}', llm: "NIP podmiotu (10 cyfr)"}
-      regon: {regex: 'REGON\W{0,3}(\d{9}(?:\d{5})?)', llm: "REGON podmiotu"}
+        normalize: company
+      nip: {regex: 'NIP\W{0,15}(?:PL)?\s?(\d[\d -]{8,12}\d)', normalize: digits, validate: '\d{10}', llm: "NIP podmiotu (10 cyfr)"}
+      regon: {regex: 'REGON\W{0,15}(\d{9}(?:\d{5})?)', llm: "REGON podmiotu"}
       przez-pelnomocnika:
         rules:
           - {pattern: 'reprezentowan\w*\s+przez|pełnomocni', value: 1}
         default: 0
       pelnomocnik:
         imie_nazwisko:
+          applies_if: {field: "../przez-pelnomocnika", equals: 1, note: "odwołujący działa bez pełnomocnika"}
           llm: "Imię i nazwisko pierwszego pełnomocnika Odwołującego (bez tytułu r. pr./adw.)"
+          verify: "imię i nazwisko pełnomocnika Odwołującego"
           regex: 'reprezentowan\w*\s+przez\s*:?\s*((?:(?:r\.\s?pr\.|adw\.|radc\w*\s+prawn\w*|adwokat\w*|mec\.)\s*)?[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:-[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+)?\s+[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:-[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+)?)'
           ci: false
           normalize: person
         nazwa:
           llm: "Nazwa kancelarii/podmiotu zatrudniającego pełnomocnika Odwołującego (z adresu do korespondencji)"
+          verify: "nazwa kancelarii lub podmiotu, w którym działa pełnomocnik Odwołującego"
+          applies_if: {field: "../przez-pelnomocnika", equals: 1, note: "odwołujący działa bez pełnomocnika"}
+          absent_ok: "nie podano nazwy kancelarii"
           regex: '(?s)adres\s+do\s+korespondencji\s*:\s*(.+?),\s*(?:ul\.|al\.|pl\.|os\.)'
           normalize: strip
         mail:
+          applies_if: {field: "../przez-pelnomocnika", equals: 1, note: "odwołujący działa bez pełnomocnika"}
+          absent_ok: "nie podano adresu e-mail pełnomocnika"
           llm: "Adres e-mail kontaktowy pełnomocnika Odwołującego"
           regex: '([\w.+-]+@[\w-]+(?:\.[\w-]+)+)'
 
@@ -121,29 +157,41 @@ output:
       # wspólne zamówienie: "1) Zamawiający – Lider, prowadzący postępowanie: ... 2) Zamawiający – Partner: ..."
       _each: '(?ms)^[ \t]*\d\)[ \t]*(.+?)(?=^[ \t]*\d\)|\Z)'
       _each_fallback: whole
-      krs: {regex: 'KRS\W{0,3}(\d{10})'}
-      nazwa: {regex: '\A\s*(?:[^\n]*:[ \t]*\n\s*)?([^\n]+)', normalize: strip, llm: "Pełna nazwa tego Zamawiającego"}
-      nip: {regex: 'NIP\W{0,3}(\d[\d -]{8,12}\d)', normalize: digits, validate: '\d{10}', llm: "NIP podmiotu (10 cyfr)"}
-      regon: {regex: 'REGON\W{0,3}(\d{9}(?:\d{5})?)', llm: "REGON podmiotu"}
+      # regex znalazł jednego, a model decyzyjny widzi więcej -> pełna lista z LLM (flaga liczona przez select_one)
+      _count_check: "Czy w tym fragmencie wymieniono więcej niż jednego zamawiającego (zamawiający wspólnie udzielający zamówienia)?"
+      _llm: "Wszyscy zamawiający (instytucje zamawiające) wymienieni w piśmie, w kolejności występowania"
+      _llm_skip: [prowadzacy_postepowanie]
+      krs: {regex: 'KRS\D{0,25}?(\d{10})', llm: "Numer KRS podmiotu (10 cyfr), jeśli podany", absent_ok: "podmioty publiczne często nie mają KRS"}
+      nazwa: {regex: '\A\s*(?:[^\n]*:[ \t]*\n\s*)?([^\n]+)', normalize: company, llm: "Pełna nazwa tego Zamawiającego", verify: "pełna nazwa Zamawiającego (instytucji prowadzącej przetarg)"}
+      nip: {regex: 'NIP\W{0,15}(?:PL)?\s?(\d[\d -]{8,12}\d)', normalize: digits, validate: '\d{10}', llm: "NIP podmiotu (10 cyfr)"}
+      regon: {regex: 'REGON\W{0,15}(\d{9}(?:\d{5})?)', llm: "REGON podmiotu"}
       prowadzacy_postepowanie:
+        applies_if: {list_min: 2, note: "w sprawie jest jeden zamawiający"}
         within: '\A[^\n]*'                         # etykieta elementu, np. "Zamawiający – Lider, prowadzący postępowanie:"
         rules:
           - {pattern: 'prowadząc\w*\s+postępowani|\bLider', value: 1}
+        select_one:                                # kilku zamawiających bez etykiety lidera -> wybór modelem decyzyjnym
+          question: "Który z zamawiających prowadzi postępowanie (jest liderem / działa w imieniu pozostałych)?"
+          label: nazwa
+          none: "Żaden nie został wskazany jako prowadzący"
         default_if_many: 0                         # kilku zamawiających, ten nie jest liderem
         default: null                              # jeden zamawiający
 
   ZamowieniePubliczne:
     numer_bzp:
+      absent_ok: "brak ogłoszenia w BZP (np. tylko Dz.Urz. UE) lub numer nie podany w piśmie"
       scope: dotyczy
       scope_fallback: head
       regex: '(\d{4}\s*/\s*BZP\s*\d{8}(?:\s*/\s*\d{2})?)'
       normalize: nospace
     numer_postepowania:
       llm: "Numer referencyjny / znak sprawy postępowania (np. ZP.271.5.2026)"
+      verify: "numer referencyjny (znak sprawy) postępowania o udzielenie zamówienia"
       scope: dotyczy
       scope_fallback: head
       regex: '(?:nr|numer)\s+(?:referencyjn\w*|postępowania|sprawy|wewnętrzn\w*)(?:\s+sprawy)?\s*:?\s*([A-Z0-9][\w./\-]*\d)'
     numer_ted:
+      absent_ok: "zamówienie poniżej progów unijnych (bez ogłoszenia w Dz.Urz. UE)"
       scope: dotyczy
       scope_fallback: head
       regex:
@@ -152,6 +200,7 @@ output:
       normalize: ted
     tytul:
       llm: "Tytuł (nazwa) zamówienia, bez cudzysłowów"
+      verify: "tytuł (nazwa) zamówienia publicznego"
       scope: dotyczy
       scope_fallback: head
       regex: '(?s)(?:pn\.|pod\s+nazwą|nazwą)\s*[„"“”]{1,2}(.+?)[”"“]'

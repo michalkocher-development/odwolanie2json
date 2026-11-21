@@ -1,21 +1,37 @@
-# MEMORY – odwolanie2json (zadanie UZP)
+# MEMORY – odwolanie2json (zadanie UZP „Odwołania2json”, HackNation 2026)
 
-- Repo: https://github.com/michalkocher-development/odwolanie2json (private, gałąź main). Lokalnie: `odwolanie2json/`. Stare repo HackNation_2026 = inny projekt.
-- Commity/pushe robi użytkownik ręcznie.
+Krótkie, kluczowe fakty dla zespołu i agentów. Szczegóły: `README.md`, `docs/ARCHITEKTURA.md`, `docs/NOWA_KLASA.md`.
 
-- Zadanie: PDF (odwołanie / pełnomocnictwo / przelew) → JSON wg `tasks/uzp/oczekiwane-json`. Ocena: F1 (etap 1 100%), etap 2: 50% F1 + 50% elastyczność (nowe typy przez config).
-- Wymogi: Python 3.13+, requirements.txt, start.bat, input/ output/, tylko open source, bez GPU (LLM po API).
-- Repo zadania sklonowane: `tasks/uzp/` (60 przykładów treningowych w `dane/`). Teksty: `tasks/txt/`.
-- Równoległość: ThreadPool (`pipeline.workers`), PyMuPDF pod blokadą (`_FITZ_LOCK`), pula hostów Ollama w `app/ollama.py` (.211 rtx5090 + .210 rtx4090). Ollama na hostach bez OLLAMA_NUM_PARALLEL → 1 zapytanie naraz/host.
-- Stack: PyMuPDF (`get_text(sort=True)`), PyYAML, silnik regex sterowany YAML (`config/doctypes/*.yaml`).
-- Środowisko: `.venv` (Python 3.13). SSL proxy: `uv` wisi → używać `pip --use-feature=truststore`.
-- Dane: 1–39 proste szablony, 40–60 realistyczne (rozpraszające daty, konsorcja, wielu zamawiających z `prowadzacy_postepowanie`).
-- Pułapki: szablon `przyklad odwolanie.pdf` to skan (potrzebny OCR); `negatywny przyklad.pdf` (TED) → pomijany. `czynnosc_powod_id=12` nieznany.
-- JEV-9B (Apache 2.0) na vLLM: http://192.168.192.207:8100 (frankencave01, ~/jev-env/start_jev.sh). System 1: `POST /v1/decide` {kind: choice|noul|score, state, question, options} → choice_index, probabilities (~0.2 s). System 2: /v1/chat/completions (ma Thinking Process – dać max_tokens 512+). Klient: `app/jev.py`, adres w `config/settings.yaml` (env JEV_URL, JEV_DISABLE=1).
-- JEV lekcje: krótki, celowany kontekst (nagłówek 'Zarzut nr 1 – …' + zdanie 'Zamawiający w dniu…'); pytanie 'Jaką czynność… opisuje ten tekst?' (56/60) >> 'Co zaskarża pierwszy zarzut?' (39/60). Sam JEV dla czynnosc_powod_id: 59/60.
-- Windows: Avast ustawia SSLKEYLOGFILE → urllib w Py3.13 crash 'OPENSSL_Uplink'. app/jev.py robi os.environ.pop.
-- gemma4:31b (Ollama) jest na wszystkich 4 maszynach; używamy rtx5090 192.168.192.211:11434 (config/settings.yaml `llm`). Klucz `llm: "opis"` w YAML = fallback: 1 wywołanie/dokument dla pustych pól, structured output, kontrola ugruntowania (wartość musi być w tekście). ~1.5 s/dok (rozgrzany), pierwsze wywołanie ~40 s ładowania. Nie włączać llm dla pól często null (data, miejscowosc, bzp/ted, krs, pesel) – ryzyko FP.
-- Ablacja `eval/evaluate.py --llm-only --cases 41-60`: same regexy wyłączone → LLM daje F1 1.0 vs 0.575 bez LLM.
-- OCR: gemma4 vision (`ocr.engines: [vlm, tesseract]`), ~6 s/stronę, obraz ~1100 px szer. (większe → 500). Zapętla się na zamazaniach → repeat_penalty 1.15, num_predict 2500, znacznik [X]. Skan z szablonu = PRAWDZIWE zanonimizowane odwołanie KIO → test może mieć realne dokumenty o innym układzie.
-- NIE: nimble-v3 (CC BY-NC).
-- Status (train): F1=0.9995 (regex+JEV+LLM). Ryzyko przeuczenia regexów na syntetycznych szablonach – na nieznanych układach ratuje LLM. Do zrobienia: równoległość dokumentów, UI (wymóg: prototyp z wgrywaniem plików), testy na realnych dokumentach.
+## Zadanie i wymagania
+- PDF-y sprawy (odwołanie / pełnomocnictwo / potwierdzenie przelewu) → JSON per dokument wg wzorów organizatora
+  (repo `Urzad-Zamowien-Publicznych/hacknation-2026`, katalog `oczekiwane-json`). Dokumenty spoza klas są pomijane.
+- Ocena: etap 1 – F1 na nieujawnionym zbiorze **realnych** spraw (≥10); finał – F1 + rozszerzalność + architektura.
+- Wymogi: Python 3.13+, `requirements.txt`, CLI/`start.bat`, `input/` → `output/` (te same nazwy), tylko komponenty
+  open source (otwarte modele z możliwością instalacji lokalnej), uruchomienie bez GPU (LLM po API), API u usługodawcy
+  i na serwerach w UE. Zwycięzca przekazuje kod, instrukcję, Docker Compose, dokumentację architektury i dodawania klas.
+- `czynnosc_powod_id` = 12 – nieznany (brak w danych i we wzorze), nie obsługujemy.
+
+## Architektura (skrót)
+- Tekst: pdfplumber (MIT) w trybie układu + wariant „strumień” dla LLM i ugruntowania; OCR skanów modelem wizyjnym
+  (render pypdfium2, BSD/Apache). PyMuPDF (AGPL) usunięty z aplikacji – zostaje tylko w generatorze danych (dev).
+- Silnik: `config/doctypes/*.yaml` – jedna klasa = jeden plik; regexy/reguły/normalizatory najpierw, potem model
+  decyzyjny (`jev:`, `candidates`, `_count_check`, `select_one`), na końcu LLM dla pustych pól/list (`llm:`, `_llm:`)
+  z kontrolą ugruntowania (osoby: rdzenie + mianownik, `app/names.py`). Statusy pól: `app/status.py`.
+- Dostawca: `provider: privatemode` (GLM-5.3-Flash, MIT; ekstrakcja + OCR + decyzje techniką logprobs: prefill
+  `answer=`, `allowed_token_ids`, kalibracja). Endpoint bez proxy: https://proxyless-api.privatemode.ai/v1, klucz
+  `PRIVATEMODE_API_KEY` w `.env`. Plan Standard: 100 zapytań/min → `rate_limit_rpm: 95` + obsługa 429.
+- Alternatywy: `openrouter` (porównawczo, poza UE), `ollama`/`jev_local` (własne serwery, adresy przez env).
+
+## Wyniki (eval/results/<dostawca>/)
+- Privatemode (UE), ekstraktor pdfplumber+pypdfium2: UZP 0.998, kontrolny adwersaryjny 0.883, adwersaryjny 0.897
+  (z PyMuPDF było 0.999 / 0.885 / 0.906); samo LLM: 0.893 / 0.836.
+- Docker: obraz zbudowany i sprawdzony – `docker compose up -d web` (API OK) i `docker compose run --rm cli` (wyniki zgodne ze wzorcem).
+- Na danych UZP 91% pól z regexów, LLM w 13/180 dok.; koszt ~€0.07–0.30 / 1000 dok.
+- Zmierzone i odrzucone: weryfikacja pól modelem (`verify`) – +0.005 F1 przy 3× koszcie (wyłączona).
+
+## Wskazówki techniczne
+- Testy: `pytest` (bez sieci; modele wyłączone przez `LLM_DISABLE=1`, `JEV_DISABLE=1`).
+- Ewaluacja: `python eval/evaluate.py --data <katalog>`; generator nietypowych spraw: `eval/adversarial/gen.py`.
+- Windows: niektóre antywirusy ustawiają `SSLKEYLOGFILE` na urządzenie (crash OpenSSL) – kod usuwa tę zmienną.
+- Edycje plików z `\n`, `\f`, `\b` w stringach przez skrypty potrafią wstawić znaki sterujące – używać narzędzia Edit.
+- Commity i pushe robi użytkownik ręcznie.

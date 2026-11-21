@@ -1,0 +1,22 @@
+{
+  "dataset": "dane",
+  "mode": "regex",
+  "documents": 180,
+  "f1": 0.9995,
+  "precision": 1.0,
+  "recall": 0.999,
+  "wall_seconds": 5.9,
+  "avg_doc_seconds": 0.25,
+  "workers": 8,
+  "usage": {},
+  "cost_total_usd": 0,
+  "cost_per_1000_docs_usd": 0.0,
+  "model_calls_per_doc": 0.0,
+  "filled_fields_by_method": {
+    "regex/reguły": "1905 (93.8%)",
+    "konfiguracja": "125 (6.2%)"
+  },
+  "docs_with_llm_call": "13/180",
+  "docs_with_decision_call": "0/180",
+  "docs_classified_by_model": "0/180"
+}

@@ -15,8 +15,9 @@ MONTHS = {
 }
 
 TITLES = re.compile(
-    r"^(?:(?:r\.\s?pr\.|radc[ay]\s+prawn[ya]|adw\.|adwokat|apl\.\s?(?:adw|radc)\.?|"
-    r"mec\.|dr|hab\.|prof\.|pan[iy]?|mgr)\s+)+",
+    # tytuły także w odmianie: "radcę prawnego", "adwokata", "aplikanta adwokackiego", "mecenasa"
+    r"^(?:(?:r\.\s?pr\.|radc\w*\s+prawn\w*|adw\.|adwokat\w*|apl\.\s?(?:adw|radc)\.?|aplikant\w*\s+\w+|"
+    r"mec\.|mecenas\w*|dr|hab\.|prof\.|pan[iy]?|mgr)\s+)+",
     re.IGNORECASE,
 )
 
@@ -76,8 +77,12 @@ def ted(v: str) -> str | None:
 
 
 def person(v: str) -> str:
-    """Imię i nazwisko bez tytułów zawodowych."""
-    return TITLES.sub("", ws(v)).strip(" ,;.")
+    """Imię i nazwisko bez tytułów zawodowych, w mianowniku ("Pana Jana Nowaka" -> "Jan Nowak", app/names.py)."""
+    from .names import to_nominative
+
+    v = TITLES.sub("", ws(v)).strip(" ,;.")
+    v = re.sub(r"^(?:Pan(?:a|u|em|i|ią)?|Pani)\s+", "", v)
+    return to_nominative(v)
 
 
 _COMPANY_JUNK = re.compile(
@@ -86,9 +91,11 @@ _COMPANY_JUNK = re.compile(
 )
 
 
-def company(v: str) -> str:
-    """Nazwa podmiotu bez śmieci z nagłówka (tytuł dokumentu, data) przed właściwą nazwą."""
-    return _COMPANY_JUNK.sub("", ws(v)).strip(" ,;:")
+def company(v: str) -> str | None:
+    """Nazwa podmiotu: bez śmieci z nagłówka (tytuł dokumentu, data) i bez doklejonego adresu / dopisku w nawiasie."""
+    v = _COMPANY_JUNK.sub("", ws(v))
+    v = re.split(r",\s*(?:ul\.|al\.|pl\.|os\.|z siedzibą)|\s+z siedzibą\s+w\s|\s*\((?!w\s)", v)[0]
+    return v.strip(" ,;:–-") or None
 
 
 def strip_punct(v: str) -> str | None:

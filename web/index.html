@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KIO.json — Analiza dokumentów</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="top">
+    <div class="top-in">
+      <div class="brand">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none" aria-hidden="true">
+          <rect width="36" height="36" rx="9" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.22)"/>
+          <path d="M11 10h9l5 5v11a2 2 0 0 1-2 2H11a2 2 0 0 1-2-2V12a2 2 0 0 1 2-2z" stroke="#ffffff" stroke-width="1.8" stroke-linejoin="round"/>
+          <path d="M15.2 18.2c-.9 0-1.2.4-1.2 1.1v.6c0 .4-.3.7-.7.7.4 0 .7.3.7.7v.6c0 .7.3 1.1 1.2 1.1M20.8 18.2c.9 0 1.2.4 1.2 1.1v.6c0 .4.3.7.7.7-.4 0-.7.3-.7.7v.6c0 .7-.3 1.1-1.2 1.1" stroke="#93c5fd" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+        <div class="brand-text">
+          <div class="brand-t">KIO<span class="brand-ext">.json</span></div>
+          <div class="brand-s">Analiza dokumentów odwoławczych</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="page">
+    <aside class="side">
+      <div id="drop" class="drop" role="button" tabindex="0" aria-label="Wgraj pliki PDF">
+        <input id="file" type="file" accept="application/pdf,.pdf" multiple hidden>
+        <div class="drop-ic" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 16V4M7 9l5-5 5 5"/>
+            <path d="M20 16v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3"/>
+          </svg>
+        </div>
+        <p>Upuść pliki PDF lub <b>wybierz z dysku</b></p>
+        <small>Odwołanie, pełnomocnictwo, przelew — także skany</small>
+      </div>
+
+      <div>
+        <div class="eyebrow side-eyebrow">Dokumenty w sprawie</div>
+        <div class="docs" id="docs" aria-live="polite"></div>
+      </div>
+    </aside>
+
+    <main id="main" aria-live="polite"></main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

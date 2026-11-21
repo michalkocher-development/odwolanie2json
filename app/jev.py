@@ -15,7 +15,7 @@ from typing import Any
 
 import yaml
 
-# Antywirus (Avast) ustawia SSLKEYLOGFILE na urządzenie, co wywraca OpenSSL w urllib.
+# Niektóre antywirusy ustawiają SSLKEYLOGFILE na urządzenie, co wywraca OpenSSL w urllib.
 os.environ.pop("SSLKEYLOGFILE", None)
 
 from .pipeline_paths import CONFIG  # noqa: E402

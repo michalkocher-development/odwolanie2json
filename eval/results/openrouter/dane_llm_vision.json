@@ -1,0 +1,23 @@
+{
+  "dataset": "dane",
+  "mode": "llm_vision",
+  "documents": 180,
+  "f1": 0.7116,
+  "precision": 0.7191,
+  "recall": 0.7042,
+  "wall_seconds": 147.6,
+  "avg_doc_seconds": 5.66,
+  "workers": 8,
+  "usage": {
+    "llm": {
+      "calls": 180,
+      "prompt_tokens": 195296,
+      "completion_tokens": 62906,
+      "cost": 0.042039,
+      "seconds": 980.64144
+    }
+  },
+  "cost_total_usd": 0.042039,
+  "cost_per_1000_docs_usd": 0.2335,
+  "model_calls_per_doc": 1.0
+}

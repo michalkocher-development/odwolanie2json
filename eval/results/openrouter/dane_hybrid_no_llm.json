@@ -1,0 +1,31 @@
+{
+  "dataset": "dane",
+  "mode": "hybrid_no_llm",
+  "documents": 180,
+  "f1": 0.9995,
+  "precision": 1.0,
+  "recall": 0.999,
+  "wall_seconds": 10.5,
+  "avg_doc_seconds": 0.44,
+  "workers": 8,
+  "usage": {
+    "decision": {
+      "calls": 117,
+      "prompt_tokens": 42237,
+      "completion_tokens": 0,
+      "cost": 0.001091,
+      "seconds": 66.247405
+    }
+  },
+  "cost_total_usd": 0.001091,
+  "cost_per_1000_docs_usd": 0.0061,
+  "model_calls_per_doc": 0.65,
+  "filled_fields_by_method": {
+    "regex/reguły": "1845 (90.9%)",
+    "konfiguracja": "125 (6.2%)",
+    "model decyzyjny": "60 (3.0%)"
+  },
+  "docs_with_llm_call": "13/180",
+  "docs_with_decision_call": "60/180",
+  "docs_classified_by_model": "0/180"
+}

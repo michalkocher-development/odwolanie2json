@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest>=8.0
+# tylko generator danych adwersaryjnych (eval/adversarial/gen.py): HTML->PDF; licencja AGPL, nie jest częścią aplikacji
+pymupdf>=1.26

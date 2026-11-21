@@ -1,0 +1,50 @@
+# PRZYKŁAD NOWEJ KLASY DOKUMENTU – wyłącznie konfiguracja, bez zmian w kodzie.
+# Potwierdzenie przekazania kopii odwołania zamawiającemu (art. 514 ust. 2 Pzp).
+# Włączenie: skopiuj ten plik do config/doctypes/ – od następnego uruchomienia klasa jest rozpoznawana.
+# Przykładowe dokumenty: docs/examples/kopia_odwolania/*.pdf (oczekiwane wyniki: *.json obok).
+name: kopia_odwolania
+
+classify:
+  description: "Potwierdzenie przekazania zamawiającemu kopii odwołania"   # opcja dla modelu decyzyjnego
+  filename_hints: [kopia]
+  min_score: 3
+  keywords:
+    'kopii\s+odwołania': 3
+    'przekazani\w*': 1
+    'art\.\s*514': 1
+  negative:
+    '^\s*ODWOŁANIE\s*$': 3
+
+enums:
+  sposoby: {1: e-mail, 2: ePUAP, 3: poczta, 4: osobiście}
+
+output:
+  data_przekazania:
+    regex:
+      - '(?:Data\s+przekazania|w\s+dniu)[ \t:]*(\d{1,2}[./-]\d{1,2}[./-]\d{4}|\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4})'
+    normalize: date
+    llm: "Data przekazania kopii odwołania zamawiającemu"
+  zamawiajacy:
+    regex:
+      - 'Zamawiając\w*\s*:\s*([^\n]+)'
+      - 'Zamawiającemu\s*\(([^)]+)\)'
+    normalize: company
+    llm: "Pełna nazwa zamawiającego, któremu przekazano kopię"
+  numer_postepowania:
+    regex: '(?:postępowani\w*\s+(?:nr|o\s+znaku)|znak\w*)\s*:?\s*([A-Z0-9][\w./\-]*\d)'
+    llm: "Numer (znak) postępowania o udzielenie zamówienia"
+  sposob_id:
+    rules:
+      - {pattern: 'poczt\w*\s+elektroniczn|e-mail|@', value: 1}
+      - {pattern: 'ePUAP', value: 2}
+      - {pattern: 'list\w*\s+polecon|operator\w*\s+pocztow', value: 3}
+      - {pattern: 'osobiście', value: 4}
+    jev:                                  # model decyzyjny, gdy żadna reguła nie pasuje
+      question: "W jaki sposób przekazano kopię odwołania?"
+      enum: sposoby
+  sposob: {from: sposob_id, enum: sposoby}
+  adres_odbiorcy:
+    regex:
+      - '([\w.+-]+@[\w-]+(?:\.[\w-]+)+)'
+      - '(?:skrzynki|skrytki)\s*:\s*(\S+)'
+    absent_ok: "nie zawsze podawany"

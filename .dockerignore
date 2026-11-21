@@ -1,0 +1,10 @@
+.venv/
+.git/
+.env
+__pycache__/
+input/
+output/
+trace/
+eval/
+tests/
+*.md

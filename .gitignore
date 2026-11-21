@@ -4,3 +4,5 @@ output/
 trace/
 input/*
 !input/.gitkeep
+.env
+eval/results/**/*.log

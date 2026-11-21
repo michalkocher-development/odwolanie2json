@@ -4,6 +4,7 @@
 name: przelew
 
 classify:
+  description: "Potwierdzenie przelewu / dowód wpłaty z banku (np. wpis od odwołania, opłata skarbowa)"   # opcja dla modelu decyzyjnego, gdy słowa kluczowe nie wystarczą
   filename_hints: [przelew, potwierdzenie]
   filename_weight: 1
   min_score: 3
@@ -38,12 +39,14 @@ output:
         - {pattern: '(?<!\d)((?:PL)?\s?\d{2}(?:\s?\d{4}){6})(?!\d)', nth: 2}  # fallback: drugi rachunek w dokumencie
       normalize: account
     numer_transakcji:
+      absent_ok: "nie każdy bank podaje numer referencyjny"
       llm: "Numer referencyjny / identyfikator transakcji"
       regex: '(?i:Nr\s+ref\.?|Numer\s+referencyjny(?:\s+operacji)?|Numer\s+transakcji(?:\s+operacji)?|ID\s+transakcji|Nr\s+transakcji|Identyfikator\s+(?:transakcji|operacji)|Referencj\w+)[ \t.:]*(?:[^\n]*\n[^\n]*?)??\b([A-Z]{2,}[A-Z0-9/\-]{4,}|\d{8,})\b'
       ci: false
     tytul:
       llm: "Tytuł (opis) przelewu, bez cudzysłowów"
-      regex: '(?s)(?i:Tytułem|Tytuł(?:\s+(?:przelewu|operacji))?|Opis(?:\s+operacji)?)\b[ \t.:]*\n?[ \t]*[„"]?(.+?)(?:[”"]|(?=\n[ \t]*\n|\n[ \t]*(?i:Nr\s+ref|Numer|Status|ZREALIZOWANO|Opłata|Kwota|Data|Identyfikator|Waluta)))'
+      verify: "tytuł (opis) przelewu"
+      regex: '(?s)(?i:Tytułem|Tytuł(?:\s+(?:przelewu|operacji))?|Opis(?:\s+operacji)?)\b[ \t.:]*\n?[ \t]*[„"]?(.+?)(?:[”"]|(?=\n[ \t]*\n|\n[ \t]*(?i:Nr\s+ref|Numer|Status|ZREALIZOWANO|Opłata|Kwota|Data|Identyfikator|Waluta)|\n[ \t]*[A-ZŁŚŻŹĆ][\w./]*(?:[ ][\w./]+){0,3}[ \t]{2,}\S))'
       ci: false
       normalize: ws
     z_rachunku:

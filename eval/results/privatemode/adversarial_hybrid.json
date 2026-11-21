@@ -1,0 +1,40 @@
+{
+  "dataset": "adversarial",
+  "mode": "hybrid",
+  "provider": "privatemode",
+  "documents": 90,
+  "f1": 0.9063,
+  "precision": 0.9356,
+  "recall": 0.8789,
+  "wall_seconds": 366.8,
+  "avg_doc_seconds": 32.5,
+  "workers": 8,
+  "usage": {
+    "decision": {
+      "calls": 144,
+      "prompt_tokens": 34756,
+      "completion_tokens": 144,
+      "cost": 0.007045,
+      "seconds": 70.087256
+    },
+    "llm": {
+      "calls": 92,
+      "prompt_tokens": 69456,
+      "completion_tokens": 10593,
+      "cost": 0.020777,
+      "seconds": 202.681405
+    }
+  },
+  "cost_total_usd": 0.027821,
+  "cost_per_1000_docs_usd": 0.3091,
+  "model_calls_per_doc": 2.62,
+  "filled_fields_by_method": {
+    "regex/reguły": "484 (50.3%)",
+    "LLM": "359 (37.3%)",
+    "konfiguracja": "69 (7.2%)",
+    "model decyzyjny": "50 (5.2%)"
+  },
+  "docs_with_llm_call": "86/90",
+  "docs_with_decision_call": "30/90",
+  "docs_classified_by_model": "17/90"
+}
