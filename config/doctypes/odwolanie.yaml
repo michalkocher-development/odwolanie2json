@@ -1,0 +1,158 @@
+# Klasa dokumentu: odwołanie do KIO.  Składnia: patrz app/engine.py
+name: odwolanie
+head_chars: 8000
+
+classify:
+  filename_hints: [odwol]
+  filename_weight: 1
+  min_score: 3
+  keywords:
+    '^\s*ODWOŁANIE\s*$': 3
+    'Krajowej Izby Odwoławczej': 1
+    'Odwołując\w*\s*:': 2
+    'Zarzut': 1
+    'wnoszę\s+(?:o|odwołanie)': 1
+  negative:
+    '^\s*PEŁNOMOCNICTWO': 3
+    'POLECENIE PRZELEWU|POTWIERDZENIE (?:WYKONANIA|REALIZACJI)': 4
+
+sections:
+  odwolujacy:
+    start: '^[ \t]*Odwołując[ya]\w*\s*:'
+    end: '^[ \t]*(?:Zamawiając\w*\s*:|dotyczy|Wykonawca|Przystępując|ODWOŁANIE|Prezes Krajowej)'
+  zamawiajacy:
+    start: '^[ \t]*Zamawiając[ya]\w*(?:\s*\([^)]*\))?\s*:'
+    end: '^[ \t]*(?:Odwołując\w*\s*:|dotyczy|Wykonawca|Przystępując|ODWOŁANIE|Prezes Krajowej)'
+  dotyczy:
+    start: '^[ \t]*dotyczy\b\s*:?'
+    end: '^[ \t]*(?:ODWOŁANIE|Wartość zamówienia|Wpis od|Działając|Prezes Krajowej)'
+    max_chars: 2000
+
+enums:
+  powody:
+    1: Decyzja o odrzuceniu oferty
+    2: Ogłoszenie wyboru oferty
+    3: Decyzja o wykluczeniu wykonawcy
+    4: Publikacja specyfikacji warunków zamówienia (SWZ)
+    5: Modyfikacja treści SWZ
+    6: Odpowiedzi i wyjaśnienia do SWZ
+    7: Zaniechanie odrzucenia oferty
+    8: Zaniechanie wykluczenia wykonawcy
+    9: Decyzja o unieważnieniu postępowania
+    10: Zaniechanie unieważnienia postępowania
+    11: Opis przedmiotu zamówienia (OPZ)
+    # 12: ??? - brak w danych treningowych, do ustalenia z organizatorem
+
+output:
+  OdwolanieKIO:
+    data:
+      scope: head
+      regex: '^[ \t]*[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:[ -][A-ZŁŚŻŹĆa-z][a-ząćęłńóśźż]+)*,?[ \t]+(?:dnia[ \t]+)?(\d{1,2}\.\d{1,2}\.\d{4}|\d{1,2}[ \t]+[a-ząćęłńóśźż]+[ \t]+\d{4})'
+      ci: false
+      normalize: date
+    czynnosc_dzien:
+      llm: "Data zaskarżonej czynności zamawiającego (dotyczy pierwszego zarzutu), np. '9 października 2026'"
+      regex:
+        - '^[ \t]*Zamawiając\w+\s+w\s+dniu\s+(\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4}|\d{1,2}\.\d{1,2}\.\d{4})'
+        - 'Zamawiając\w+\s+w\s+dniu\s+(\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4}|\d{1,2}\.\d{1,2}\.\d{4})'
+      normalize: date
+    czynnosc_powod_id:
+      # kontekst = nagłówek pierwszego zarzutu + zdanie o zaskarżonej czynności
+      within:
+        - 'Zarzut\w*\s+nr\s*1\s*[–—-][^\n]*'
+        - ['^[ \t]*Zamawiając\w+\s+w\s+dniu[^.]*\.', 'Zamawiając\w+\s+w\s+dniu[^.]*\.']
+      jev:
+        question: 'Jaką czynność lub zaniechanie zamawiającego opisuje ten tekst?'
+        enum: powody
+        other: 'Inna czynność'
+        fallback_scope: all                # brak zdania "Zamawiający w dniu" -> tekst od nagłówka ODWOŁANIE
+        fallback_after: '^\s*ODWOŁANIE\s*$'
+        max_chars: 2500
+      rules:
+        - {pattern: 'zaniecha\w*\s+unieważni', value: 10}
+        - {pattern: 'unieważni', value: 9}
+        - {pattern: 'nie\s+wykluczył|zaniecha\w*\s+wykluczeni', value: 8}
+        - {pattern: 'nie\s+odrzucił|zaniecha\w*\s+odrzuceni', value: 7}
+        - {pattern: 'wyklucz', value: 3}
+        - {pattern: 'odrzuc', value: 1}
+        - {pattern: 'wyb[oó]r\w*\s+oferty|wyboru\s+oferty', value: 2}
+        - {pattern: 'zmodyfikował|modyfikac|zmienił\w*\s+treść', value: 5}
+        - {pattern: 'odpowiedzi|wyjaśnie', value: 6}
+        - {pattern: 'Opis\w*\s+Przedmiotu\s+Zamówienia|\bOPZ\b', value: 11}
+        - {pattern: 'Specyfikac|\bSWZ\b|ogłoszenie\s+o\s+zamówieniu', value: 4}
+    czynnosc_opis: {from: czynnosc_powod_id, enum: powody}
+    miejscowosc:
+      scope: head
+      regex: '^[ \t]*([A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:[ -][A-ZŁŚŻŹĆa-z][a-ząćęłńóśźż]+)*),?[ \t]+(?:dnia[ \t]+)?(?:\d{1,2}\.\d{1,2}\.\d{4}|\d{1,2}[ \t]+[a-ząćęłńóśźż]+[ \t]+\d{4})'
+      ci: false
+      normalize: strip
+
+  Odwolujacy:
+    - _scope: odwolujacy
+      krs: {regex: 'KRS\W{0,3}(\d{10})'}
+      nazwa:
+        llm: "Pełna nazwa Odwołującego (przy konsorcjum: nazwa Lidera konsorcjum)"
+        regex:
+          - 'Lider\w*[^\n]*:[ \t]*\n\s*([^\n]+)'          # konsorcjum -> nazwa lidera
+          - '\A\s*(?!Konsorcjum)([^\n]+)'
+        normalize: strip
+      nip: {regex: 'NIP\W{0,3}(\d[\d -]{8,12}\d)', normalize: digits, validate: '\d{10}', llm: "NIP podmiotu (10 cyfr)"}
+      regon: {regex: 'REGON\W{0,3}(\d{9}(?:\d{5})?)', llm: "REGON podmiotu"}
+      przez-pelnomocnika:
+        rules:
+          - {pattern: 'reprezentowan\w*\s+przez|pełnomocni', value: 1}
+        default: 0
+      pelnomocnik:
+        imie_nazwisko:
+          llm: "Imię i nazwisko pierwszego pełnomocnika Odwołującego (bez tytułu r. pr./adw.)"
+          regex: 'reprezentowan\w*\s+przez\s*:?\s*((?:(?:r\.\s?pr\.|adw\.|radc\w*\s+prawn\w*|adwokat\w*|mec\.)\s*)?[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:-[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+)?\s+[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:-[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+)?)'
+          ci: false
+          normalize: person
+        nazwa:
+          llm: "Nazwa kancelarii/podmiotu zatrudniającego pełnomocnika Odwołującego (z adresu do korespondencji)"
+          regex: '(?s)adres\s+do\s+korespondencji\s*:\s*(.+?),\s*(?:ul\.|al\.|pl\.|os\.)'
+          normalize: strip
+        mail:
+          llm: "Adres e-mail kontaktowy pełnomocnika Odwołującego"
+          regex: '([\w.+-]+@[\w-]+(?:\.[\w-]+)+)'
+
+  Zamawiajacy:
+    - _scope: zamawiajacy
+      # wspólne zamówienie: "1) Zamawiający – Lider, prowadzący postępowanie: ... 2) Zamawiający – Partner: ..."
+      _each: '(?ms)^[ \t]*\d\)[ \t]*(.+?)(?=^[ \t]*\d\)|\Z)'
+      _each_fallback: whole
+      krs: {regex: 'KRS\W{0,3}(\d{10})'}
+      nazwa: {regex: '\A\s*(?:[^\n]*:[ \t]*\n\s*)?([^\n]+)', normalize: strip, llm: "Pełna nazwa tego Zamawiającego"}
+      nip: {regex: 'NIP\W{0,3}(\d[\d -]{8,12}\d)', normalize: digits, validate: '\d{10}', llm: "NIP podmiotu (10 cyfr)"}
+      regon: {regex: 'REGON\W{0,3}(\d{9}(?:\d{5})?)', llm: "REGON podmiotu"}
+      prowadzacy_postepowanie:
+        within: '\A[^\n]*'                         # etykieta elementu, np. "Zamawiający – Lider, prowadzący postępowanie:"
+        rules:
+          - {pattern: 'prowadząc\w*\s+postępowani|\bLider', value: 1}
+        default_if_many: 0                         # kilku zamawiających, ten nie jest liderem
+        default: null                              # jeden zamawiający
+
+  ZamowieniePubliczne:
+    numer_bzp:
+      scope: dotyczy
+      scope_fallback: head
+      regex: '(\d{4}\s*/\s*BZP\s*\d{8}(?:\s*/\s*\d{2})?)'
+      normalize: nospace
+    numer_postepowania:
+      llm: "Numer referencyjny / znak sprawy postępowania (np. ZP.271.5.2026)"
+      scope: dotyczy
+      scope_fallback: head
+      regex: '(?:nr|numer)\s+(?:referencyjn\w*|postępowania|sprawy|wewnętrzn\w*)(?:\s+sprawy)?\s*:?\s*([A-Z0-9][\w./\-]*\d)'
+    numer_ted:
+      scope: dotyczy
+      scope_fallback: head
+      regex:
+        - '(\d{4}\s*/\s*S\s*\d{1,3}\s*-\s*\d{6})'
+        - '\b(\d{6}-\d{4})\b'
+      normalize: ted
+    tytul:
+      llm: "Tytuł (nazwa) zamówienia, bez cudzysłowów"
+      scope: dotyczy
+      scope_fallback: head
+      regex: '(?s)(?:pn\.|pod\s+nazwą|nazwą)\s*[„"“”]{1,2}(.+?)[”"“]'
+      normalize: ws

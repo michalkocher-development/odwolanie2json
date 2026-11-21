@@ -1,0 +1,31 @@
+# Przetwarzanie: liczba dokumentów obsługiwanych równolegle (wątki; czas to głównie oczekiwanie na modele). Env: WORKERS
+pipeline:
+  workers: 8
+
+# Ustawienia modeli. Nadpisanie adresu: zmienna środowiskowa JEV_URL; wyłączenie: JEV_DISABLE=1
+jev:
+  enabled: true
+  base_url: http://192.168.192.207:8100   # frankencave01, vLLM serve_decide.py (System 1: /v1/decide)
+  timeout: 60
+  workers: 16                             # równoległe zapytania
+
+# Generujący LLM (Ollama) – fallback dla pól z kluczem `llm:` w YAML. Env: LLM_URL, LLM_MODEL, LLM_DISABLE=1
+llm:
+  enabled: true
+  base_url:                               # pula hostów Ollama; zapytania idą do najmniej obciążonego
+    - http://192.168.192.211:11434        # rtx5090 (32 GB)
+    - http://192.168.192.210:11434        # rtx4090 (2x24 GB) – host gemmy zespołu
+  cooldown: 60                            # s pomijania hosta po błędzie połączenia
+  model: gemma4:31b
+  num_ctx: 8192
+  max_chars: 8000                          # tekst dokumentu przekazywany do modelu (pierwsze strony)
+  keep_alive: 30m
+  timeout: 300
+  require_grounding: true                  # odrzuć wartość, której nie ma dosłownie w tekście
+
+# OCR skanów (PDF bez warstwy tekstowej). Silniki próbowane kolejno.
+ocr:
+  engines: [vlm, tesseract]                # vlm = model wizyjny przez Ollama (pula hostów i model z sekcji llm)
+  max_pages: 3                             # kluczowe dane są na pierwszych stronach
+  image_width: 1100                        # px; większe obrazy spowalniają i potrafią dać błąd 500
+  timeout: 300

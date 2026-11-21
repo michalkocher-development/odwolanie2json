@@ -1,0 +1,70 @@
+# Klasa dokumentu: pełnomocnictwo.  Składnia: patrz app/engine.py
+name: pelnomocnictwo
+
+classify:
+  filename_hints: [pelnomoc, pełnomoc]
+  filename_weight: 1
+  min_score: 3
+  keywords:
+    '^\s*P\s?E\s?Ł\s?N\s?O\s?M\s?O\s?C\s?N\s?I\s?C\s?T\s?W\s?O\b': 4
+    'udziela\w*\s+pełnomocnictwa|ustanawia\w*\s+pełnomocnik|upoważniam': 2
+    'Mocodawc': 2
+  negative:
+    '^\s*ODWOŁANIE\s*$': 3
+    'Zarzut\s+nr': 2
+
+sections:
+  # Mocodawca: od początku dokumentu do momentu wskazania pełnomocników
+  mocodawca:
+    start: '\A'
+    end: 'udziela\w*\s+pełnomocnictwa|ustanawia\w*|upoważnia\w*|§\s*2|^[ \t]*Pełnomocni(?:cy|k)\b[ \t]'
+  # Podpisy: od etykiety "Mocodawca:" / "W imieniu X:" albo pierwszej linii kropek do końca
+  podpisy:
+    start: '^[ \t]*(?:Mocodawca|W\s+imieniu\b[^\n]*|Za\s+Mocodawcę)\s*:|\.{10,}'
+    include_start: true
+    max_chars: 3000
+
+output:
+  mocodawca:
+    - _scope: mocodawca
+      # konsorcjum: "1) Firma A, ... 2) Firma B, ..." -> wielu mocodawców; inaczej cała sekcja
+      _each: '(?s)(?:^|\s)\d\)\s+(.+?)(?=\s\d\)\s|\(dalej|\Z)'
+      _each_fallback: whole
+      data:
+        imie_nazwisko:
+          regex: 'niżej\s+podpisan\w*\s+([A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+\s+[A-ZŁŚŻŹĆ][a-ząćęłńóśźż-]+)'
+          ci: false
+          normalize: person
+        krs: {regex: 'KRS\W{0,3}(\d{10})'}
+        nazwa:
+          regex:
+            - '(?s)Mocodawcą\s+jest\s+(.+?),\s*(?:ul\.|al\.|pl\.|os\.)'
+            - '(?s)pod\s+firmą\s+(.+?),\s*(?:ul\.|al\.|pl\.|os\.)'
+            - '(?s)Działając\s+w\s+imieniu\s+(.+?)\s*(?:\(|,|\s+z\s+siedzibą)'
+            - '^[ \t]*Mocodawca[ \t]{2,}(?!PEŁNOMOCNI|Pełnomocni)(\S[^\n]*?)[ \t]*$'
+            # ogólny wzorzec: nazwa zakończona formą prawną (sp. z o.o., S.A., sp. k., sp.j. ...)
+            - '([A-ZŁŚŻŹĆ0-9][\w\-.&]*(?:[ \t\n]+[A-ZŁŚŻŹĆ0-9][\w\-.&]*){0,6}[ \t\n]+(?:sp\.\s?z\s?o\.\s?o\.(?:\s?sp\.\s?k\.)?|sp\.\s?[kj]\.|S\.A\.?|spółka\s+(?:z\s+ograniczoną\s+odpowiedzialnością|akcyjna|jawna|komandytowa)))'
+            - '^[ \t]*(?![^\n]*\d{4}\s*(?:r\.?|roku)?[ \t]*$)([^\n]+?),\s*(?:ul\.|al\.|pl\.|os\.)'
+          normalize: company
+          llm: "Pełna nazwa mocodawcy (podmiotu udzielającego pełnomocnictwa)"
+        nip: {regex: 'NIP\W{0,3}(\d[\d -]{8,12}\d)', normalize: digits, validate: '\d{10}', llm: "NIP mocodawcy (10 cyfr)"}
+        typ:
+          rules:
+            - {pattern: 'prowadząc\w*\s+działalność|Centraln\w+\s+Ewidencji|CEIDG', value: osoba_fizyczna}
+          default: osoba_prawna
+      podpisujacy:
+        - _scope: podpisy
+          _ci: false
+          _blocks: '^[ \t]*W\s+imieniu\b[^\n]*:'   # konsorcjum: blok podpisów per członek (wg kolejności)
+          _each: '(?:^|[ \t]{2,})(?!(?:Prezes|Wiceprezes|Członek|Prokurent|Dyrektor|Właściciel|Wspólnik|Pełnomocni|Mocodawca|Zarząd)\b)([A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:-[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+)?[ \t]+[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:-[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+)?)(?=[ \t]{2,}|[ \t]*$|[ \t]+[a-ząćęłńóśźż(])'
+          imie_nazwisko: {take: item, normalize: person}
+
+  pelnomocnicy:
+    - _scope: all      # osoby z tytułem zawodowym (r. pr., adw.) w całym dokumencie, bez duplikatów
+      _ci: false
+      _each: '((?:r\.\s?pr\.|adw\.|radc\w*\s+prawn\w*|adwokat\w*|apl\.\s?(?:adw|radc)\.?)\s+[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:-[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+)?\s+[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:-[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+)?(?:[^()\n]{0,30}\([^)]*\))?)'
+      imie_nazwisko:
+        regex: '^((?:\S+\.?\s+){0,2}?[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:-[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+)?\s+[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+(?:-[A-ZŁŚŻŹĆ][a-ząćęłńóśźż]+)?)'
+        ci: false
+        normalize: person
+      pesel: {regex: 'PESEL\W{0,3}(\d{11})'}   # w danych referencyjnych PESEL jest tekstem

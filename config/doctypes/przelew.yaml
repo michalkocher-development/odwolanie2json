@@ -1,0 +1,54 @@
+# Klasa dokumentu: potwierdzenie przelewu.  Składnia: patrz app/engine.py
+# Wzorzec "etykieta[ .:]*(?:[^\n]*\n[^\n]*?)??WARTOŚĆ" obsługuje: wartość w tej samej linii,
+# kropki wiodące ("KWOTA ....... 50,00") oraz układ dwukolumnowy (etykiety w linii, wartości pod spodem).
+name: przelew
+
+classify:
+  filename_hints: [przelew, potwierdzenie]
+  filename_weight: 1
+  min_score: 3
+  keywords:
+    'PRZELEW': 2
+    'rachun\w+\s+(?:odbiorcy|obciążany|zleceniodawcy|nadawcy|nr)|Na\s+rachunek|Z\s+rachunku': 2
+    'Kwot': 1
+    'bankowości|\bBank\b': 1
+  negative:
+    '^\s*ODWOŁANIE\s*$': 3
+    '^\s*P\s?E\s?Ł\s?N\s?O\s?M\s?O\s?C\s?N\s?I\s?C\s?T\s?W\s?O\b': 3
+
+output:
+  przelew_bankowy:
+    data_operacji:
+      llm: "Data operacji/realizacji przelewu"
+      regex:
+        - '(?:Data\s+(?:operacji|transakcji|realizacji|wykonania|księgowania|zlecenia|obciążenia)|w\s+dniu)[ \t.:]*(?:[^\n]*\n[^\n]*?)??(\d{4}-\d{2}-\d{2}|\d{1,2}[.\-/]\d{1,2}[.\-/]\d{4}|\d{1,2}\s+[a-ząćęłńóśźż]+\s+\d{4})'
+        - '\b(\d{4}-\d{2}-\d{2})\b'
+      normalize: date
+    kwota:
+      llm: "Kwota przelewu (sama liczba z groszami, np. '100,00')"
+      regex:
+        - '(?:Kwota(?!\s+(?:prowizji|opłaty))|w\s+kwocie|Wartość)[^\d\n]{0,90}(?:\n[^\d\n]{0,60})?(\d[\d  .]*[.,]\d{2})'
+        - '(\d[\d  .]*[.,]\d{2})\s*(?:PLN|zł)'
+      normalize: amount
+      validate: '(?!0(?:\.0+)?$).+'
+    na_rachunek:
+      llm: "Numer rachunku odbiorcy (beneficjenta)"
+      regex:
+        - '(?:Rachunek\s+(?:odbiorcy|beneficjenta|docelowy|adresata|uznawany)|Na\s+rachun\w+(?:\s+nr)?)[ \t.:]*(?:[^\n]*\n[^\n]*?)??((?:PL)?\s?\d{2}(?:\s?\d{4}){6})'
+        - {pattern: '(?<!\d)((?:PL)?\s?\d{2}(?:\s?\d{4}){6})(?!\d)', nth: 2}  # fallback: drugi rachunek w dokumencie
+      normalize: account
+    numer_transakcji:
+      llm: "Numer referencyjny / identyfikator transakcji"
+      regex: '(?i:Nr\s+ref\.?|Numer\s+referencyjny(?:\s+operacji)?|Numer\s+transakcji(?:\s+operacji)?|ID\s+transakcji|Nr\s+transakcji|Identyfikator\s+(?:transakcji|operacji)|Referencj\w+)[ \t.:]*(?:[^\n]*\n[^\n]*?)??\b([A-Z]{2,}[A-Z0-9/\-]{4,}|\d{8,})\b'
+      ci: false
+    tytul:
+      llm: "Tytuł (opis) przelewu, bez cudzysłowów"
+      regex: '(?s)(?i:Tytułem|Tytuł(?:\s+(?:przelewu|operacji))?|Opis(?:\s+operacji)?)\b[ \t.:]*\n?[ \t]*[„"]?(.+?)(?:[”"]|(?=\n[ \t]*\n|\n[ \t]*(?i:Nr\s+ref|Numer|Status|ZREALIZOWANO|Opłata|Kwota|Data|Identyfikator|Waluta)))'
+      ci: false
+      normalize: ws
+    z_rachunku:
+      llm: "Numer rachunku zleceniodawcy (nadawcy, płatnika)"
+      regex:
+        - '(?:Rachunek\s+(?:obciążany|zleceniodawcy|nadawcy|płatnika|źródłowy)|Z\s+rachun\w+(?:\s+nr)?)[ \t.:]*(?:[^\n]*\n[^\n]*?)??((?:PL)?\s?\d{2}(?:\s?\d{4}){6})'
+        - '(?<!\d)((?:PL)?\s?\d{2}(?:\s?\d{4}){6})(?!\d)'  # fallback: pierwszy rachunek w dokumencie
+      normalize: account
