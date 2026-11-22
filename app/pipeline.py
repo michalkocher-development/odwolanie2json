@@ -147,7 +147,7 @@ def process_tree(inp: Path, out: Path, trace_dir: Path | None = None, progress: 
     import time
     from concurrent.futures import as_completed
 
-    pdfs = sorted(inp.rglob("*.pdf"))
+    pdfs = sorted(p for p in inp.rglob("*") if p.is_file() and p.suffix.lower() == ".pdf")
     n, t0 = 0, time.time()
     with ThreadPoolExecutor(max_workers=max(1, workers())) as ex:
         futures = {ex.submit(_safe_process, pdf): pdf for pdf in pdfs}
