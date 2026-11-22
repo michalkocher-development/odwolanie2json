@@ -6,3 +6,6 @@ input/*
 !input/.gitkeep
 .env
 eval/results/**/*.log
+
+# notatki agenta (lokalne)
+MEMORY.md
