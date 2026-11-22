@@ -57,9 +57,15 @@ Co pokazuje:
 - **Do sprawdzenia:** lista pól brakujących i niezwalidowanych (np. zła suma kontrolna) z komunikatem; pola, których
   brak jest normalny (np. brak PESEL), są oznaczone osobno.
 - **Pobranie:** podgląd i pobranie JSON (dokładnie ten sam wynik co w trybie wsadowym).
+- **Dodaj klasę** (panel po lewej): nazwa, słowa kluczowe, opis i przykładowy JSON -> szkielet konfiguracji YAML
+  (edytowalny) -> klasa działa od razu dla kolejnych wgranych PDF-ów; „Pobierz YAML” = plik do `config/doctypes/`.
+  Klasy dodane w interfejsie żyją w pamięci serwera web (tryb wsadowy oceny ich nie widzi); trwale – plik YAML.
+
+![Dodawanie klasy w interfejsie: przykładowy JSON -> szkielet YAML](docs/img/dodaj_klase.jpg)
 
 Serwer bez dodatkowych zależności (`http.server`). API: `POST /api/process` (treść = PDF, nagłówek `X-Filename`;
-odpowiedź: JSON wynikowy + ślad + statusy pól), `GET /api/health`.
+odpowiedź: JSON wynikowy + ślad + statusy pól), `GET /api/health`, `GET /api/classes`,
+`POST /api/class/preview` (szkielet YAML z przykładowego JSON-a), `POST /api/class` (dodanie klasy).
 
 ## Przepływ danych
 

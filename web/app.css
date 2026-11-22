@@ -816,3 +816,48 @@ button {
   .row-b { grid-template-columns: 1fr auto; gap: 6px 12px; }
   .k { grid-column: 1 / -1; font-size: 13px; }
 }
+
+/* ---- klasy dokumentów + „Dodaj klasę” ---- */
+.class-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px 2px; }
+.class-tag {
+  font-size: 12.5px; padding: 4px 9px; border-radius: 999px;
+  background: rgba(255, 255, 255, .12); color: #fff; border: 1px solid rgba(255, 255, 255, .18);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.class-tag.new { background: #fff; color: var(--accent); border-color: #fff; font-weight: 600; }
+.add-class {
+  width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 9px 12px; border-radius: 10px; font-weight: 600; font-size: 14px; color: #fff; cursor: pointer;
+  background: rgba(255, 255, 255, .1); border: 1px solid rgba(255, 255, 255, .3); transition: .15s;
+}
+.add-class:hover { background: rgba(255, 255, 255, .2); border-color: rgba(255, 255, 255, .6); }
+
+.cdlg {
+  border: 0; padding: 0; border-radius: var(--radius); width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px); box-shadow: 0 20px 60px rgba(7, 35, 71, .35); color: var(--text);
+  background: var(--surface);
+}
+.cdlg::backdrop { background: rgba(7, 35, 71, .45); }
+.cdlg-in { padding: 26px 28px; display: flex; flex-direction: column; gap: 14px; }
+.cdlg-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.cdlg-head h2 { margin: 4px 0 0; font-size: 22px; }
+.cdlg-x { font-size: 26px; line-height: 1; color: var(--muted); cursor: pointer; background: none; border: 0; padding: 0 4px; }
+.cdlg-lead { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.cdlg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cdlg label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.cdlg label.wide { grid-column: 1 / -1; }
+.cdlg label[hidden] { display: none; }
+.cdlg input, .cdlg textarea {
+  font: inherit; font-size: 14px; font-weight: 400; color: var(--text); background: var(--soft);
+  border: 1px solid var(--line-2); border-radius: 9px; padding: 9px 11px;
+}
+.cdlg textarea { font-family: var(--mono); font-size: 13px; resize: vertical; }
+.cdlg input:focus, .cdlg textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+.cdlg-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.cdlg-row[hidden] { display: none; }
+.cdlg-foot { justify-content: flex-end; }
+.cdlg-msg:empty { display: none; }
+.cdlg-msg { font-size: 14px; padding: 10px 12px; border-radius: 9px; background: var(--soft); }
+.cdlg-msg.ok { background: var(--ok-soft); color: var(--ok); }
+.cdlg-msg.err { background: var(--err-soft); color: var(--err); }
+@media (max-width: 640px) { .cdlg-grid { grid-template-columns: 1fr; } .cdlg-in { padding: 20px 16px; } }

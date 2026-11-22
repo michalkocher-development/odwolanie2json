@@ -4,6 +4,44 @@ Klasa dokumentu to jeden plik `config/doctypes/<nazwa>.yaml`. Silnik (`app/engin
 z tego katalogu przy starcie. Gotowy, działający przykład: `config/doctypes_examples/kopia_odwolania.yaml`
 (potwierdzenie przekazania kopii odwołania) z dokumentami testowymi w `docs/examples/kopia_odwolania/`.
 
+## Generator szkieletu: z przykładowego JSON-a
+
+- **Interfejs web:** przycisk „Dodaj klasę” w panelu po lewej – nazwa, słowa kluczowe, opis, przykładowy JSON ->
+  szkielet YAML do poprawienia -> „Dodaj klasę” (od razu działa dla kolejnych PDF-ów) / „Pobierz YAML”.
+- **Wiersz poleceń:** `python -m app.new_class <nazwa> <przyklad.json> --opis "..." --slowa "kopii odwołania" [--zapisz]`
+  (`--zapisz` = od razu `config/doctypes/<nazwa>.yaml`).
+
+Generator tworzy pole `llm:` dla każdego klucza JSON (daty -> `normalize: date` + `checks: [date]`, liczby -> `amount`/`int`,
+listy obiektów -> lista wypełniana przez LLM) oraz sekcję `classify`. Na złożonym odwołaniu UZP sam szkielet, bez żadnej
+wiedzy domenowej, odczytuje 15 z 22 pól; resztę (kody ze słownika, pola zagnieżdżone w listach) dopracowuje się poniższymi kluczami.
+
+## Najkrótsza droga: klasa z samych opisów pól (bez regexów)
+
+Wystarczą słowa kluczowe do rozpoznania i opis każdego pola – resztę robi LLM, a wartości są przyjmowane tylko,
+jeśli występują w tekście dokumentu:
+
+```yaml
+name: kopia_min
+classify:
+  description: "Potwierdzenie przekazania zamawiającemu kopii odwołania"
+  keywords: {'kopii\s+odwołania': 3}
+  min_score: 3
+output:
+  data_przekazania: {llm: "Data przekazania kopii odwołania", normalize: date}
+  zamawiajacy: {llm: "Pełna nazwa zamawiającego"}
+  numer_postepowania: {llm: "Numer (znak) postępowania"}
+  sposob: {llm: "Sposób przekazania kopii, np. e-mail, ePUAP, poczta"}
+  adres_odbiorcy: {llm: "Adres e-mail lub skrzynka odbiorcy"}
+```
+
+Sprawdzone na `docs/examples/kopia_odwolania/`: 8 z 10 pól zgodnych ze wzorcem od razu (~1,5 s na dokument).
+Obie różnice dotyczą pola `sposob` – wolny tekst („poczta elektroniczna” zamiast „e-mail”, „platformy ePUAP” zamiast „ePUAP”) – i znikają po dodaniu słownika
+(`jev:` z `enum`, `rules` albo normalizatora `map`). Potem stopniowo dokłada się regexy dla pól o stałym formacie –
+szybciej, taniej i deterministycznie (pełna wersja: `config/doctypes_examples/kopia_odwolania.yaml`).
+
+Na serwerze z Dockerem katalog `config/` jest montowany do kontenera: nowy plik w `config/doctypes/` działa w trybie
+wsadowym od razu, a interfejs web po `docker compose restart web` – bez przebudowy obrazu.
+
 ## Krok po kroku
 
 1. **Zbierz 2–3 przykładowe PDF-y** i przygotuj dla nich oczekiwany JSON (jak w `docs/examples/kopia_odwolania/*.json`).

@@ -49,7 +49,7 @@ const ICONS = {
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const label = (k) => LABELS[k] || k;
+const label = (k) => LABELS[k] || (() => { const s = String(k).replace(/[_-]+/g, " ").trim(); return s.charAt(0).toUpperCase() + s.slice(1); })();
 const rowDomId = (docId, path) => `row-${docId}-${path.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 
 const state = {
@@ -416,7 +416,14 @@ function renderMain() {
     ${review.length > reviewShown.length ? `<div class="r-l" style="padding-top:8px">…oraz ${review.length - reviewShown.length} kolejnych pól oznaczonych poniżej.</div>` : ""}
   </section>` : "";
 
-  const sectionsHtml = Object.entries(d.result).map(([k, v]) => {
+  // pola proste na najwyższym poziomie (klasy o płaskiej strukturze, np. dodane w interfejsie) -> jedna sekcja
+  const isSection = (v) => v && typeof v === "object" && (!Array.isArray(v) || (v.length && typeof v[0] === "object"));
+  const flat = Object.fromEntries(Object.entries(d.result).filter(([, v]) => !isSection(v)));
+  const flatHtml = Object.keys(flat).length ? `<section class="sec">
+      <div class="sec-h"><span class="sec-ic">${ICONS.file}</span><h3>Dane dokumentu</h3></div>
+      ${renderObjectHtml(doc.id, flat, "", d.fields, flaggedPaths)}
+    </section>` : "";
+  const sectionsHtml = flatHtml + Object.entries(d.result).filter(([, v]) => isSection(v)).map(([k, v]) => {
     let inner = "";
     if (Array.isArray(v)) {
       inner = v.map((item, i) => `
@@ -547,5 +554,69 @@ input.addEventListener("change", () => {
   drop.classList.remove("over");
 }));
 drop.addEventListener("drop", (e) => handleFiles(e.dataTransfer.files));
+
+// ---- klasy dokumentów: lista + „Dodaj klasę” (szkielet YAML z przykładowego JSON-a, POST /api/class) ----
+async function loadClasses() {
+  try {
+    const list = await (await fetch("/api/classes")).json();
+    list.forEach((c) => { if (!DOC_TYPES[c.name]) DOC_TYPES[c.name] = c.description; });
+    $("#class-list").innerHTML = list.map((c) =>
+      `<span class="class-tag ${c.source === "ui" ? "new" : ""}" title="${esc(c.description)}">${esc(DOC_TYPES[c.name] || c.name)}</span>`).join("");
+  } catch (e) { /* lista klas jest pomocnicza */ }
+}
+
+const cdlg = $("#class-dialog");
+function cmsg(text, kind = "") {
+  const m = $("#c-msg");
+  m.textContent = text;
+  m.className = `cdlg-msg ${kind}`;
+}
+async function postJSON(url, body) {
+  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  return data;
+}
+$("#btn-add-class").addEventListener("click", () => { cmsg(""); cdlg.showModal(); $("#c-name").focus(); });
+$("#cdlg-close").addEventListener("click", () => cdlg.close());
+$("#c-load").addEventListener("click", () => $("#c-file").click());
+$("#c-file").addEventListener("change", async () => {
+  const f = $("#c-file").files[0];
+  if (f) {
+    $("#c-json").value = await f.text();
+    if (!$("#c-name").value) {
+      $("#c-name").value = f.name.replace(/\.json$/i, "").toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^[^a-z]+/, "");
+    }
+  }
+  $("#c-file").value = "";
+});
+$("#c-gen").addEventListener("click", async () => {
+  try {
+    const data = await postJSON("/api/class/preview", {
+      name: $("#c-name").value.trim(), description: $("#c-desc").value, keywords: $("#c-kw").value, example: $("#c-json").value,
+    });
+    $("#c-yaml").value = data.yaml;
+    $("#c-yaml-wrap").hidden = false;
+    $("#c-actions").hidden = false;
+    cmsg("Szkielet gotowy. Popraw opisy pól, jeśli trzeba, i kliknij „Dodaj klasę”.");
+  } catch (e) { cmsg(e.message, "err"); }
+});
+$("#c-add").addEventListener("click", async () => {
+  try {
+    const c = await postJSON("/api/class", { yaml: $("#c-yaml").value });
+    DOC_TYPES[c.name] = c.description;
+    await loadClasses();
+    cmsg(`Klasa „${c.description}” jest aktywna – wgraj PDF, aby ją sprawdzić. Na stałe: zapisz pobrany YAML w config/doctypes/.`, "ok");
+  } catch (e) { cmsg(e.message, "err"); }
+});
+$("#c-dl").addEventListener("click", () => {
+  const m = $("#c-yaml").value.match(/^name:\s*(\S+)/m);
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([$("#c-yaml").value], { type: "text/yaml" }));
+  a.download = `${m ? m[1] : "klasa"}.yaml`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+loadClasses();
 
 render();

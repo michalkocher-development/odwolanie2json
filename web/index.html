@@ -37,6 +37,15 @@
         <small>Odwołanie, pełnomocnictwo, przelew — także skany</small>
       </div>
 
+      <div class="classes">
+        <div class="eyebrow side-eyebrow">Klasy dokumentów</div>
+        <div class="class-list" id="class-list"></div>
+        <button class="add-class" type="button" id="btn-add-class">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          Dodaj klasę
+        </button>
+      </div>
+
       <div>
         <div class="eyebrow side-eyebrow">Dokumenty w sprawie</div>
         <div class="docs" id="docs" aria-live="polite"></div>
@@ -45,6 +54,41 @@
 
     <main id="main" aria-live="polite"></main>
   </div>
+
+  <dialog id="class-dialog" class="cdlg" aria-labelledby="cdlg-title">
+    <form method="dialog" class="cdlg-in" id="class-form">
+      <div class="cdlg-head">
+        <div>
+          <div class="eyebrow">Nowa klasa dokumentu · bez zmian w kodzie</div>
+          <h2 id="cdlg-title">Dodaj klasę</h2>
+        </div>
+        <button class="cdlg-x" type="button" id="cdlg-close" aria-label="Zamknij">×</button>
+      </div>
+      <p class="cdlg-lead">Podaj przykładowy wynik JSON – powstanie szkielet konfiguracji YAML: każde pole opisane dla
+        modelu, wartości przyjmowane tylko, gdy występują w dokumencie. Możesz go poprawić przed dodaniem.</p>
+      <div class="cdlg-grid">
+        <label>Nazwa (identyfikator)<input id="c-name" placeholder="np. kopia_odwolania"></label>
+        <label>Słowa kluczowe (po przecinku)<input id="c-kw" placeholder="np. kopii odwołania, art. 514"></label>
+        <label class="wide">Opis klasy (dla modelu rozpoznającego typ)<input id="c-desc" placeholder="np. Potwierdzenie przekazania zamawiającemu kopii odwołania"></label>
+        <label class="wide">Przykładowy JSON
+          <textarea id="c-json" rows="7" spellcheck="false" placeholder='{"data_przekazania": "2026-10-14", "zamawiajacy": "Gmina Wieliczka", "sposob": "e-mail"}'></textarea>
+        </label>
+      </div>
+      <div class="cdlg-row">
+        <button class="btn btn-g" type="button" id="c-load">Wczytaj plik JSON</button>
+        <input id="c-file" type="file" accept=".json,application/json" hidden>
+        <button class="btn btn-p" type="button" id="c-gen">Generuj szkielet YAML</button>
+      </div>
+      <label class="wide cdlg-yaml" id="c-yaml-wrap" hidden>Konfiguracja klasy (YAML) – można edytować
+        <textarea id="c-yaml" rows="12" spellcheck="false"></textarea>
+      </label>
+      <div class="cdlg-msg" id="c-msg" role="status"></div>
+      <div class="cdlg-row cdlg-foot" id="c-actions" hidden>
+        <button class="btn btn-g" type="button" id="c-dl">Pobierz YAML</button>
+        <button class="btn btn-p" type="button" id="c-add">Dodaj klasę</button>
+      </div>
+    </form>
+  </dialog>
 
   <script src="/static/app.js"></script>
 </body>

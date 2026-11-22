@@ -21,14 +21,22 @@ ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config"
 
 
+# Klasy dodane w trakcie działania (interfejs web, przycisk „Dodaj klasę”) – tylko w pamięci procesu; trwale: plik YAML.
+EXTRA_DOCTYPES: dict[str, dict[str, Any]] = {}
+
+
 @lru_cache
-def load_doctypes() -> dict[str, dict[str, Any]]:
+def _file_doctypes() -> dict[str, dict[str, Any]]:
     """Każdy plik config/doctypes/*.yaml to jedna klasa dokumentu."""
     types = {}
     for f in sorted((CONFIG / "doctypes").glob("*.yaml")):
         spec = yaml.safe_load(f.read_text(encoding="utf-8"))
         types[spec["name"]] = spec
     return types
+
+
+def load_doctypes() -> dict[str, dict[str, Any]]:
+    return {**_file_doctypes(), **EXTRA_DOCTYPES}
 
 
 def classify(text: str, filename: str) -> tuple[str | None, dict[str, float]]:
