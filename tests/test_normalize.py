@@ -61,3 +61,8 @@ def test_person_strips_titles_and_returns_nominative(raw, expected):
 def test_apply_chain_stops_on_none():
     assert n.apply("brak", ["date", "strip"]) is None
     assert n.apply(" 9999 284 065 ", "digits") == "9999284065"
+
+
+def test_ocr_redaction_marker_removed():
+    assert n.apply("[X] Spółka z o.o.", "company") == "Spółka z o.o."
+    assert n.apply("[X] [X]", "company") is None

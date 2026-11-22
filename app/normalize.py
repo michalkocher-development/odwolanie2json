@@ -163,6 +163,10 @@ def apply(value: Any, names: str | list[str] | None, custom: dict[str, Any] | No
     """Normalizatory po nazwie: wbudowane (NORMALIZERS) albo zdefiniowane w YAML (`custom`: nazwa -> lista kroków)."""
     if value is None or names is None:
         return value
+    if isinstance(value, str) and "[X]" in value:  # [X] = fragment zamazany na skanie (OCR) – nie jest częścią wartości
+        value = ws(value.replace("[X]", " ")).strip(" ,;:–-")
+        if not value:
+            return None
     for name in [names] if isinstance(names, str) else names:
         if custom and name in custom:
             value = run_steps(value, custom[name], custom)

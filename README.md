@@ -35,27 +35,73 @@ Testy (bez sieci i kosztów): `pip install -r requirements-dev.txt && pytest`
 - Dokument spoza klas (np. ogłoszenie TED) daje plik z pustym obiektem `{}` (ustalenie z organizatorem).
 - `trace/` zawiera dla każdego pola: wartość, metodę (regex/reguła/enum), wzorzec i fragment źródłowy (transparentność).
 
-## Interfejs webowy
+Ocena na serwerze organizatora: komenda w [RUN.md](RUN.md) (`sudo docker compose --profile cli run --rm cli`
+w `/opt/solution`; obraz zbudowany wcześniej, klucz w `/opt/solution/.env`).
 
-```bat
-start_web.bat            REM albo: python -m app.web --port 8000
+## Interfejs webowy (prototyp do wgrywania dokumentów)
+
+Uruchomienie: `start_web.bat`, `python -m app.web --port 8000` albo `docker compose up -d web`
+(na serwerze oceny usługa `web` działa stale na porcie 8000 i startuje sama po restarcie – `restart: unless-stopped`).
+Adres: http://localhost:8000 (na serwerze: `http://<adres-serwera>:8000`).
+
+![Interfejs: wynik dla odwołania, po kliknięciu pola – cytat ze strony źródłowej](docs/img/interfejs.jpg)
+
+Co pokazuje:
+- **Wgrywanie:** przeciągnij jeden lub kilka PDF-ów (także skany bez warstwy tekstowej) – każdy dokument przetwarzany
+  osobno, ze wskaźnikiem przetwarzania.
+- **Wynik:** rozpoznany typ dokumentu i czas przetwarzania; każda sekcja JSON (np. `OdwolanieKIO`, `Odwolujacy`,
+  `Zamawiajacy`) jako osobny panel z polami.
+- **Skąd wartość:** kliknięcie pola pokazuje **dokładny cytat** z dokumentu (numer strony, podświetlony fragment
+  w kontekście), metodę (regex / reguła / model decyzyjny z prawdopodobieństwem / LLM ugruntowany w tekście) i użyty
+  wzorzec albo pytanie do modelu.
+- **Do sprawdzenia:** lista pól brakujących i niezwalidowanych (np. zła suma kontrolna) z komunikatem; pola, których
+  brak jest normalny (np. brak PESEL), są oznaczone osobno.
+- **Pobranie:** podgląd i pobranie JSON (dokładnie ten sam wynik co w trybie wsadowym).
+
+Serwer bez dodatkowych zależności (`http.server`). API: `POST /api/process` (treść = PDF, nagłówek `X-Filename`;
+odpowiedź: JSON wynikowy + ślad + statusy pól), `GET /api/health`.
+
+## Przepływ danych
+
+```
+input/<sprawa>/<plik>.pdf
+  │ 1. tekst      app/pdf_text.py – pdfplumber (układ strony) + pypdfium2 (kolejność strumienia, tabele)
+  │               brak warstwy tekstowej (skan) -> render strony -> OCR modelem wizyjnym (najpierw 1 strona)
+  │ 2. typ        app/pipeline.py – punkty za słowa kluczowe z `classify` każdej klasy YAML;
+  │               wynik niepewny -> model decyzyjny wybiera klasę albo „inny dokument” -> zapis {} i koniec
+  │               (skan: OCR pozostałych stron tylko w liczbie potrzebnej tej klasie)
+  │ 3. ekstrakcja app/engine.py – interpreter config/doctypes/<klasa>.yaml:
+  │               a) sekcje dokumentu (kotwice), regexy, reguły, słowniki, normalizatory
+  │               b) model decyzyjny: wybór spośród kandydatów (np. która data jest datą czynności),
+  │                  pola-wybory (powód odwołania), liczność list, wskazanie elementu listy
+  │               c) LLM – jedno wywołanie, tylko dla pól i list, które nadal są puste; JSON Schema;
+  │                  wartość przyjęta tylko, jeśli występuje w tekście (ugruntowanie)
+  │ 4. walidacja  app/validate.py – `checks` / `cross_checks` z YAML; błąd = status `invalid`, wartość zostaje
+  │ 5. statusy    app/status.py – found / invalid / absent_ok / not_applicable / missing
+  ▼
+output/<sprawa>/<plik>.json   (struktura z `output:` w YAML = model kanoniczny UZP)
+trace/<sprawa>/<plik>.json    (dla każdego pola: wartość, metoda, cytat, strona, kontekst, wzorzec/pytanie, pewność, status)
 ```
 
-Otwórz http://localhost:8000, upuść PDF-y (kilka naraz, także skany). Każda sekcja JSON jest osobnym panelem;
-kliknięcie pola pokazuje **dokładny cytat** z dokumentu (strona, podświetlony fragment w kontekście), metodę
-(regex / reguła / model decyzyjny z pewnością / LLM zweryfikowany w tekście) i użyty wzorzec. Przyciski: podgląd i pobranie JSON.
-Serwer bez dodatkowych zależności (`http.server`); API: `POST /api/process` (treść = PDF, nagłówek `X-Filename`), `GET /api/health`.
+- Dokumenty przetwarzane równolegle (8 wątków); budżet czasu na dokument 150 s – po jego przekroczeniu bez dalszych
+  wywołań modeli (wynik z reguł). Uszkodzony PDF lub błąd -> `{}`, reszta partii działa dalej.
+- Wszystkie wywołania modeli idą przez `app/backend.py` (profil dostawcy, ogranicznik zapytań, ponowienia, licznik kosztu).
 
-## Architektura
-
-```
-PDF ─► pdf_text (pdfplumber, MIT; skan → OCR modelem wizyjnym, render pypdfium2)
-    ─► classify (słowa kluczowe z YAML; gdy niepewne – model decyzyjny; dokument spoza klas -> {})
-    ─► engine (YAML): regex / reguły / sekcje ─► model decyzyjny (wybory, kandydaci) ─► LLM (puste pola i listy)
-    ─► JSON + trace (metoda, cytat, strona, prawdopodobieństwo, status pola)
-```
 Szczegóły: [docs/ARCHITEKTURA.md](docs/ARCHITEKTURA.md). Biblioteki: PyYAML (MIT), pdfplumber / pdfminer.six (MIT),
 pypdfium2 (BSD-3 / Apache-2.0), Pillow (MIT-CMU) – wyłącznie licencje permisywne.
+
+## Dostawca modeli: Privatemode (UE)
+
+Wersja dla jury używa **Privatemode** (Edgeless Systems GmbH, Niemcy) – usługi z API zgodnym z OpenAI, przetwarzającej
+dane wyłącznie na serwerach w UE, w poufnym środowisku (szyfrowana pamięć), bez przechowywania promptów. Model:
+**GLM-5.3-Flash** (licencja MIT, otwarte wagi – możliwa instalacja lokalna) w trzech rolach: OCR skanów (wejście obrazem),
+model decyzyjny (klasyfikacja i wybory, prawdopodobieństwa z `logprobs`) oraz uzupełnianie pustych pól (structured output).
+
+Dlaczego Privatemode: regulamin wymaga otwartych modeli i API u usługodawcy na serwerach w UE (OpenRouter kieruje zapytania
+poza UE – zostawiony tylko do porównań); API przyjmuje `logprobs` i ograniczenie tokenów, co pozwala na model decyzyjny
+z kalibrowaną pewnością; endpoint bez lokalnego proxy (`https://proxyless-api.privatemode.ai/v1`) – nic do instalowania;
+jeden model obsługuje tekst i obrazy. Koszt: €0.20 / €0.65 za 1M tokenów (wejście / wyjście), czyli €0.07–0.30 na
+1000 dokumentów tekstowych. Zmiana dostawcy: jedna linia `provider:` w `config/settings.yaml` (lub zmienna `PROVIDER`).
 
 Modele (po API, bez GPU lokalnie) – dostawca w `config/settings.yaml` (`provider`, `decisions.provider`):
 
@@ -86,13 +132,38 @@ Obecna wersja: dostawca Privatemode (UE), model GLM-5.3-Flash, ekstrakcja tekstu
 oczywistymi podejściami: **same regexy** (nasze reguły z YAML, bez modeli) i **samo LLM** (ten sam model dostaje tekst
 dokumentu i wzór JSON organizatora z komentarzami i zwraca cały JSON; typ dokumentu podany z góry).
 
+**Na jakich danych** (każda sprawa = odwołanie + pełnomocnictwo + potwierdzenie przelewu, z wzorcowymi JSON-ami):
+
+| zbiór | skąd | po co |
+|---|---|---|
+| treningowy UZP – 60 spraw, 180 PDF | dane organizatora (`dane/przyklad_01…60` w repozytorium zadania), syntetyczne | zgodność z wzorami UZP; na nich strojone reguły |
+| nietypowe układy – zbiór kontrolny, 30 spraw, 90 PDF | nasz generator `eval/adversarial/gen.py`, inny seed niż zbiór do strojenia; **nieużywany przy strojeniu** | odporność na dokumenty inne niż treningowe: inne etykiety i kolejność sekcji, tabele, odmiana nazwisk („Pana Jana Nowaka”), różne formaty dat/NIP/IBAN/kwot, konsorcja, potwierdzenie banku po angielsku, rozpraszające daty, brakujące pola |
+| skany – 30 spraw, 90 PDF | `eval/make_scans.py`: 15 spraw treningowych + 15 kontrolnych wyrenderowanych jako obraz (150 dpi, szarość, obrót, rozmycie, szum), **bez warstwy tekstowej** | OCR i czas przetwarzania partii skanów |
+
+Ukrytego zbioru realnych spraw nie znamy – stąd dwa własne zbiory sprawdzające dokumenty spoza wzorca treningowego.
+
+**Metryka** (`eval/evaluate.py`, przybliżenie oficjalnej): JSON spłaszczony do par (ścieżka pola, wartość), listy jako
+multizbiory (bez kolejności); TP = wartość niepusta i równa wzorcowi, FP = niepusta i błędna, FN = wzorzec niepusty
+i nietrafiony; para pusta/pusta się nie liczy. Podajemy micro-F1 ze wszystkich pól wszystkich dokumentów zbioru.
+
 **Dokładność (F1)**
 
 | zbiór | same regexy | **hybryda** | samo LLM |
 |---|---|---|---|
 | treningowy UZP (60 spraw, 180 PDF) | 0.998 | **0.998** | 0.905 |
-| nietypowe układy – zbiór kontrolny (90 PDF) | 0.563 | **0.881** | 0.822 |
-| skany bez warstwy tekstowej (90 PDF; regexy z OCR) | 0.600 | **0.907** | – |
+| nietypowe układy – zbiór kontrolny (30 spraw, 90 PDF) | 0.563 | **0.881** | 0.822 |
+| skany bez warstwy tekstowej (30 spraw, 90 PDF; regexy z OCR) | 0.600 | **0.907** | – |
+
+**Wkład składników** (zbiór kontrolny – nietypowe układy, F1):
+
+| wariant | F1 |
+|---|---|
+| same regexy/reguły | 0.563 |
+| reguły + model decyzyjny (bez LLM) | 0.632 |
+| reguły + LLM (bez modelu decyzyjnego) | 0.801 |
+| **pełna hybryda** | **0.881** |
+
+Model decyzyjny i LLM uzupełniają się: każdy z osobna podnosi wynik, razem dają najwięcej.
 
 **Czas i koszt** (czas na dokument mierzony sekwencyjnie)
 
